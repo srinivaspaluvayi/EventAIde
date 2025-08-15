@@ -1,0 +1,25 @@
+name: eventaide
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - python-dotenv
+  - requests
+  - numpy
+  - pandas
+  - scipy
+  - jupyterlab
+  - matplotlib
+  - scikit-learn
+  - jupyter-dash
+  - pip:
+    - beautifulsoup4
+    - openai
+    - gradio
+    - gensim
+    - modal
+    - ollama
+    - psutil
+    - setuptools
