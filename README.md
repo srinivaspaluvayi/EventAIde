@@ -1,22 +1,6 @@
 # EventAIde (Event + AI + Aide)
 EventAIde is a chatbot that helps you discover all available events and explore different genres in any city. It's the perfect companion for staying updated on what's happening locally or in new places when you travel—making it easy to find concerts, sports, festivals, and more, wherever you are.
 
-## Tech Stack
-
-• **Python** - Core programming language (3.11)
-• **Conda** - Environment and dependency management
-• **Jupyter Notebook** - Interactive development environment
-• **Gradio** - Web interface for the chatbot application
-• **Ticketmaster API** - Real-time event data integration
-• **OpenAI** - AI/LLM integration for chatbot functionality
-• **Pandas** - Data manipulation and analysis
-• **NumPy** - Numerical computing
-• **Scikit-learn** - Machine learning capabilities
-• **Requests** - HTTP library for API calls
-• **BeautifulSoup4** - Web scraping and HTML parsing
-• **Gensim** - Natural language processing and topic modeling
-• **Matplotlib** - Data visualization
-• **Python-dotenv** - Environment variable management
 
 ## Setup
 ### 1. Clone the repository
