@@ -31,36 +31,6 @@ conda activate eventaide
   TICKETMASTER_API_KEY=your_api_key_here
   ```
 
-## Run Instructions
-
-1. **Run Data/API Initialization Notebooks First**
-
-   - Open and execute all cells in `events_api.ipynb`:
-
-     ```bash
-     jupyter lab events_api.ipynb
-     ```
-
-   - *If you have another required notebook for initialization, such as `events_genres.ipynb`, add this here as well:*
-
-     ```bash
-     jupyter lab events_genres.ipynb
-     ```
-
-2. **Run the Main Application Notebook**
-
-   - After initializing required files, run the app:
-
-     ```bash
-     jupyter lab app.ipynb
-     ```
-
-   - Or, if the app is runnable with Gradio via a Python script:
-
-     ```bash
-     python -m gradio app.ipynb
-     ```
-
 **Notes:**
 - It's important to run the initialization notebooks first to ensure all required data/preprocessing is complete before starting the main application.
 - If you add new notebooks or change file names, update these steps accordingly.
