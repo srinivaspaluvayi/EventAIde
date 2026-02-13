@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "eventaide": {
+      "command": "python",
+      "args": ["-m", "eventaide_mcp.server"],
+      "env": {
+        "DEFAULT_CITY": "Rolla",
+        "DEFAULT_STATE_CODE": "MO",
+        "DEFAULT_COUNTRY_CODE": "US",
+        "DEFAULT_FORMAT": "json",
+        "TICKETMASTER_API_KEY": "YOUR_TICKETMASTER_CONSUMER_KEY"
+      }
+    }
+  }
+}
