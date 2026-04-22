@@ -1,8 +1,30 @@
 from __future__ import annotations
 
+import html
 import streamlit as st
 
-from travel_planner.models.schemas import FinalPlan
+from travel_planner.models.schemas import FinalPlan, FoodOption
+
+
+def _dining_row_source(notes: str) -> str:
+    n = notes or ""
+    if "[source:provider:geoapify]" in n:
+        return "Geoapify"
+    if "[source:fallback:llm]" in n:
+        return "LLM fallback"
+    return "Unknown"
+
+
+def _dining_plan_summary(dining: list[FoodOption]) -> str:
+    if not dining:
+        return "No dining rows returned."
+    geo = sum(1 for d in dining if "[source:provider:geoapify]" in (d.notes or ""))
+    llm = sum(1 for d in dining if "[source:fallback:llm]" in (d.notes or ""))
+    if llm == 0:
+        return f"All **{len(dining)}** picks are **Geoapify** POI data (not LLM-invented venues)."
+    if geo == 0:
+        return f"All **{len(dining)}** picks are **LLM fallback** (Geoapify unavailable or returned no rows)."
+    return f"**Mixed:** {geo} from Geoapify, {llm} from LLM fallback."
 
 
 def inject_custom_css() -> None:
@@ -194,6 +216,35 @@ def render_destination_insights(plan: FinalPlan) -> None:
         st.markdown("### Travel Essentials")
         st.markdown(f'<div class="card-panel"><b>Visa:</b> {info.visa_requirements}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="card-panel"><b>Weather:</b> {info.weather_summary}</div>', unsafe_allow_html=True)
+
+
+def render_dining_picks(plan: FinalPlan) -> None:
+    """Show full dining list from ``plan.dining`` (Geoapify or LLM) — itinerary tab alone stays generic."""
+    st.markdown("### Dining picks")
+    dining = plan.dining or []
+    st.markdown(_dining_plan_summary(dining))
+    if not dining:
+        st.caption("Enable `GEOAPIFY_API_KEY` and regenerate to load OSM-backed restaurants.")
+        return
+    for idx, d in enumerate(dining, start=1):
+        src = _dining_row_source(d.notes or "")
+        badge_class = "badge" if src == "Geoapify" else "cost-badge"
+        name = html.escape(d.name)
+        cuisine = html.escape(d.cuisine)
+        price = html.escape(d.price_level)
+        notes = html.escape(d.notes or "")
+        src_e = html.escape(src)
+        st.markdown(
+            f"""
+            <div class="activity-card">
+                <b>{idx}. {name}</b>
+                <span class="{badge_class}" style="margin-left:0.35rem;">{src_e}</span><br/>
+                <span class="activity-detail">{cuisine} · {price}</span><br/>
+                <span class="activity-detail">{notes}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def render_itinerary_browser(plan: FinalPlan) -> None:

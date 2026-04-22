@@ -64,7 +64,9 @@ Optional:
 - `MAX_SEARCH_RESULTS=6`
 - `TRIPFORGE_BACKEND_URL=http://127.0.0.1:8000`
 - `SERPAPI_API_KEY` (for real hotel search integration)
-- `FOURSQUARE_API_KEY` (for real dining/places integration)
+- `GEOAPIFY_API_KEY` — [Geoapify](https://www.geoapify.com/) key for dining POIs ([Places API](https://apidocs.geoapify.com/docs/places/) + [Geocoding](https://apidocs.geoapify.com/docs/geocoding/); OSM-backed data). If unset, dining falls back to the LLM.
+- `GEOAPIFY_DINING_RADIUS_M` (optional, default `8000`, clamped 1000–50000) — search radius in meters around the geocoded destination
+- `DINING_MAX_RESULTS` (optional, default `30`, clamped 5–100) — max dining options returned from Geoapify / LLM before any future filtering you add
 
 ### 4) Run the backend API
 
@@ -82,6 +84,13 @@ streamlit run app.py
 
 ```bash
 PYTHONPATH=src pytest -q
+```
+
+To run **each agent** in order and see OK / EMPTY / FAIL summaries (no API keys printed):
+
+```bash
+PYTHONPATH=src python scripts/run_agents_check.py
+PYTHONPATH=src python scripts/run_agents_check.py --only dining
 ```
 
 ## Example Inputs
@@ -115,6 +124,7 @@ PYTHONPATH=src pytest -q
 
 - If model calls fail, verify `OPENAI_API_KEY`.
 - If frontend cannot reach backend, verify `TRIPFORGE_BACKEND_URL` and that FastAPI is running on port `8000`.
-- If hotel or dining results look generic, add `SERPAPI_API_KEY` and `FOURSQUARE_API_KEY` to enable live provider data.
+- If dining results look generic, verify `GEOAPIFY_API_KEY` and restart the backend after changing `.env`.
+- If hotel results look generic, verify `SERPAPI_API_KEY`.
 - If research results are thin, increase `MAX_SEARCH_RESULTS`.
 - If Streamlit does not start, ensure your venv is active and dependencies installed.

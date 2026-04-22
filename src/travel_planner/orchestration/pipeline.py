@@ -13,7 +13,8 @@ from travel_planner.agents.budget_optimizer_agent import BudgetOptimizerAgent
 from travel_planner.config.settings import Settings
 from travel_planner.models.schemas import FinalPlan
 from travel_planner.orchestration.agno_runtime import runtime_note
-from travel_planner.providers.foursquare_dining_provider import FoursquareDiningProvider
+from travel_planner.providers.dining_provider import NullDiningProvider
+from travel_planner.providers.geoapify_dining_provider import GeoapifyDiningProvider
 from travel_planner.providers.serpapi_hotel_provider import SerpApiHotelProvider
 from travel_planner.utils.llm import SmallModelClient
 from travel_planner.utils.logging import get_logger
@@ -29,7 +30,20 @@ class TravelPlannerPipeline:
         self.research_agent = DestinationResearchAgent(llm, max_search_results=settings.max_search_results)
         self.flight_agent = FlightSearchAgent(llm)
         self.hotel_agent = HotelSearchAgent(llm, provider=SerpApiHotelProvider(api_key=settings.serpapi_key))
-        self.dining_agent = DiningAgent(llm, provider=FoursquareDiningProvider(api_key=settings.foursquare_api_key))
+        if settings.geoapify_api_key:
+            dining_provider = GeoapifyDiningProvider(
+                api_key=settings.geoapify_api_key,
+                radius_m=settings.geoapify_dining_radius_m,
+                max_results=settings.dining_max_results,
+            )
+        else:
+            self.logger.warning(
+                "GEOAPIFY_API_KEY is empty; dining will use LLM fallback until a key is set"
+            )
+            dining_provider = NullDiningProvider()
+        self.dining_agent = DiningAgent(
+            llm, provider=dining_provider, max_results=settings.dining_max_results
+        )
         self.budget_agent = BudgetOptimizerAgent(llm)
         self.team = TravelPlanningTeam(
             destination_agent=self.research_agent,
