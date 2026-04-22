@@ -1,71 +1,130 @@
-# EventAIde (Event + AI + Aide)
+# Multi-Agent AI Travel Planner
 
-EventAIde is a chatbot that helps you discover events in any city. Enter a city, pick your interests (sports, music, movies), and get the top 10 events in a clean chat UI.
+Production-ready, portfolio-quality travel planner built with:
+- Python
+- Agno (agent orchestration)
+- GPT-4o-mini (small model)
+- FastAPI backend + Streamlit UI
+
+The app takes natural language travel preferences and produces:
+- structured profile extraction
+- destination research insights
+- day-by-day itinerary (morning/afternoon/evening)
+- logistics recommendations
+- budget summary with chart
+- downloadable `travel_plan.html`
+
+## Architecture (Production Split)
+
+Backend (FastAPI):
+- API layer: `src/travel_planner/backend/app.py`
+- Service layer: `src/travel_planner/backend/service.py`
+- Contracts: `src/travel_planner/backend/schemas.py`
+- Agent orchestration: `src/travel_planner/orchestration/pipeline.py`
+
+Agent team:
+1. `PreferenceCollectorAgent`
+2. `DestinationResearchAgent`
+3. `FlightSearchAgent`
+4. `HotelSearchAgent`
+5. `DiningAgent`
+6. `BudgetOptimizerAgent`
+7. `ItineraryPlannerAgent`
+8. `LogisticsAgent`
+9. `SummaryGeneratorAgent`
 
 ## Setup
 
-### 1. Clone the repository
+### 1) Create and activate a virtual environment
 
 ```bash
-git clone https://github.com/srinivaspaluvayi/EventAIde.git
-cd EventAIde
+python -m venv .venv
+source .venv/bin/activate
 ```
 
-### 2. Install dependencies
-
-This project uses **Conda** for environment management.
+### 2) Install dependencies
 
 ```bash
-conda env create -f environment.yaml
-conda activate eventaide
+pip install -r requirements.txt
 ```
 
-If you use pip, install the dependencies listed in `environment.yaml` manually.
+### 3) Configure environment variables
 
-### 3. Environment variables
-
-Create a `.env` file in the project root:
-
-```
-TICKETMASTER_API_KEY=your_api_key_here
-```
-
-Get a free API key from [Ticketmaster Developer](https://developer.ticketmaster.com/).
-
-### 4. Run the app
-
-From the project root (with the `eventaide` env active):
+Copy `.env.example` to `.env` and fill values:
 
 ```bash
-python app.py
+cp .env.example .env
 ```
 
-Open the URL shown (e.g. http://127.0.0.1:7860). **Flow:**
+Required:
+- `OPENAI_API_KEY`
 
-1. The assistant greets you and asks for a **city** (e.g. New York, St Louis).
-2. You enter a city; spelling is corrected via Ollama if needed.
-3. The assistant asks for your **interests**: sports, music, and/or movies.
-4. You reply (e.g. "music and sports"); you get the **top 10 events** in Markdown.
+Optional:
+- `OPENAI_MODEL=gpt-4o-mini`
+- `MAX_SEARCH_RESULTS=6`
+- `TRIPFORGE_BACKEND_URL=http://127.0.0.1:8000`
+- `SERPAPI_API_KEY` (for real hotel search integration)
+- `GEOAPIFY_API_KEY` — [Geoapify](https://www.geoapify.com/) key for dining POIs ([Places API](https://apidocs.geoapify.com/docs/places/) + [Geocoding](https://apidocs.geoapify.com/docs/geocoding/); OSM-backed data). If unset, dining falls back to the LLM.
+- `GEOAPIFY_DINING_RADIUS_M` (optional, default `8000`, clamped 1000–50000) — search radius in meters around the geocoded destination
+- `DINING_MAX_RESULTS` (optional, default `30`, clamped 5–100) — max dining options returned from Geoapify / LLM before any future filtering you add
 
-**Requirements:**
+### 4) Run the backend API
 
-- **Ollama** running with a model (e.g. `llama3.2:latest`) for city name correction. Install from [ollama.ai](https://ollama.ai).
-- **Ticketmaster API key** in `.env` (see step 3).
+```bash
+PYTHONPATH=src uvicorn travel_planner.backend.app:app --host 0.0.0.0 --port 8000
+```
 
-## Optional: MCP server
+### 5) Run the Streamlit app
 
-The **EventAIde MCP server** exposes Ticketmaster as tools for Cursor or other MCP clients. The Gradio app does **not** use this server; it calls `eventaide_mcp.ticketmaster` directly.
+```bash
+streamlit run app.py
+```
 
-To run the MCP server (e.g. for Cursor):
+### 6) Run smoke tests
 
-1. From the project root: `python -m eventaide_mcp.server`
-2. Add it to Cursor’s MCP config (see `mcp-config.example.json`) and set `TICKETMASTER_API_KEY` in `env`.
+```bash
+PYTHONPATH=src pytest -q
+```
 
-**Tools:** `get_all_events`, `get_music_events`, `get_sports_events`, `get_concerts`.
+To run **each agent** in order and see OK / EMPTY / FAIL summaries (no API keys printed):
 
-## Project layout
+```bash
+PYTHONPATH=src python scripts/run_agents_check.py
+PYTHONPATH=src python scripts/run_agents_check.py --only dining
+```
 
-- **`app.py`** — Gradio chat UI (city → interests → top 10 events).
-- **`city_corrections.py`** — City name spelling correction (Ollama).
-- **`eventaide_mcp/ticketmaster.py`** — Ticketmaster Discovery API (used by the app and by the MCP server).
-- **`eventaide_mcp/server.py`** — MCP server entrypoint.
+## Example Inputs
+
+- “Plan a 5-day Tokyo trip in October, budget $1800, food + anime + photography, solo traveler.”
+- “I need a 7-day Paris family trip in June, moderate budget, 2 adults + 2 kids, museums and parks.”
+- “Backpacking in Bangkok for 4 days under $500, cheap transport, street food and nightlife.”
+
+## Project Structure
+
+- `app.py` — Streamlit frontend (calls backend API)
+- `src/travel_planner/backend/` — FastAPI app, service layer, and API contracts
+- `src/travel_planner/agents/` — specialized multi-agent implementations
+- `src/travel_planner/agents/team_orchestrator.py` — team coordination across specialist agents
+- `src/travel_planner/orchestration/pipeline.py` — execution flow across agents
+- `src/travel_planner/models/schemas.py` — strict Pydantic schemas
+- `src/travel_planner/tools/search_tool.py` — free destination web research
+- `src/travel_planner/utils/html_renderer.py` — HTML report generation
+- `src/travel_planner/ui/charts.py` — matplotlib budget chart helper
+
+## Production Notes
+
+- Typed schemas at every boundary
+- Explicit backend/frontend boundary for deployability and API reuse
+- Fail-safe JSON parsing and fallback handling
+- Small-model prompt design to control token cost
+- Session-level logging for debugging and demos
+- Legacy event-discovery code was removed to keep the repository clean and focused on this product.
+
+## Troubleshooting
+
+- If model calls fail, verify `OPENAI_API_KEY`.
+- If frontend cannot reach backend, verify `TRIPFORGE_BACKEND_URL` and that FastAPI is running on port `8000`.
+- If dining results look generic, verify `GEOAPIFY_API_KEY` and restart the backend after changing `.env`.
+- If hotel results look generic, verify `SERPAPI_API_KEY`.
+- If research results are thin, increase `MAX_SEARCH_RESULTS`.
+- If Streamlit does not start, ensure your venv is active and dependencies installed.
