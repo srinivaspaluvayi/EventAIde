@@ -1,19 +1,32 @@
 [project]
-name = "eventaide"
+name = "travel-planner-ai"
 version = "0.1.0"
-description = "EventAIde: discover events (music, sports, concerts) via MCP tools."
+description = "Multi-agent AI travel planner with Streamlit, Agno, and GPT-4o-mini."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp[cli]",
-    "anyio",
+    "agno",
+    "openai",
+    "streamlit",
+    "pydantic",
+    "python-dotenv",
+    "ddgs",
+    "beautifulsoup4",
+    "requests",
+    "matplotlib",
 ]
 
 [project.optional-dependencies]
-dev = []
+dev = [
+    "pytest",
+]
 
 [project.scripts]
-eventaide-mcp = "eventaide_mcp.server:main"
+eventaide-app = "app:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
-include = ["eventaide_mcp*"]
+where = ["src"]
+include = ["travel_planner*"]

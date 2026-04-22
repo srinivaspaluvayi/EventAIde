@@ -1,167 +1,134 @@
-"""EventAIde: chat UI — city, then interests, then top 10 events in Markdown."""
-import os
-import re
-from datetime import datetime
+from __future__ import annotations
 
-import gradio as gr
-from dotenv import load_dotenv
+from pathlib import Path
+import sys
+import json
+import time
 
-from city_corrections import get_city
-from eventaide_mcp.ticketmaster import get_events_by_interests
+import streamlit as st
 
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+ROOT = Path(__file__).resolve().parent
+SRC_PATH = ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
 
-WELCOME = (
-    "Hi! 👋 I'm EventAIde. **Which city** are you looking for events in? "
-    "Just type the city name (e.g. New York, Los Angeles)."
+from travel_planner.config.settings import Settings
+from travel_planner.orchestration.pipeline import TravelPlannerPipeline
+from travel_planner.ui.charts import build_budget_chart
+from travel_planner.ui.components import (
+    inject_custom_css,
+    render_destination_insights,
+    render_export_summary,
+    render_hero,
+    render_itinerary_browser,
+    render_itinerary_timeline,
+    render_logistics,
+    render_profile_summary,
 )
-INTERESTS_PROMPT = (
-    "Got it, **{city}**! What are you interested in? "
-    "Pick one or more: **sports**, **music**, **movies**."
-)
-TOP_N = 10
+from travel_planner.utils.costing import itinerary_cost_table
 
 
-def _format_date(date_str: str) -> str:
-    """Turn YYYY-MM-DD into a friendlier display (e.g. Sat, Mar 15)."""
-    if not date_str or len(date_str) < 10:
-        return date_str
-    try:
-        d = datetime.strptime(date_str[:10], "%Y-%m-%d")
-        return d.strftime("%a, %b %d")
-    except ValueError:
-        return date_str
+def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    payload = {
+        "sessionId": "39ed9e",
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    log_path = Path("/Volumes/External/Drive_C/EventAIde/.cursor/debug-39ed9e.log")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=True) + "\n")
 
 
-def _flat_events_to_markdown(events: list) -> str:
-    """Format a flat list of event dicts as clean, readable Markdown."""
-    if not events:
-        return "_No events found._"
-    blocks = []
-    for i, event in enumerate(events, 1):
-        name = event.get("name", "—")
-        venue = event.get("venue", {})
-        venue_name = venue.get("name", "—")
-        date = event.get("date", "—")
-        time = event.get("time", "")
-        address = venue.get("address", "") or ""
-        city = venue.get("city", "") or ""
-        state = venue.get("state", "") or ""
-        location = ", ".join(filter(None, [address, city, state]))
-        date_display = _format_date(date)
-        time_display = f" at {time}" if time else ""
-        block = [
-            f"### {i}. {name}",
-            "",
-            f"**Venue:** {venue_name}  ",
-            f"**When:** {date_display}{time_display}  ",
-        ]
-        if location:
-            block.append(f"**Where:** {location}  ")
-        block.append("")
-        blocks.append("\n".join(block))
-    return "\n---\n\n".join(blocks).strip()
+def main() -> None:
+    st.set_page_config(page_title="AI Travel Planner", layout="wide")
+    inject_custom_css()
+    render_hero()
+    st.caption("Agno + GPT-4o-mini + Streamlit")
 
+    with st.container(border=True):
+        st.markdown("### Tell us your travel preferences")
+        user_prompt = st.text_area(
+            "Travel request",
+            placeholder=(
+                "Example: Plan a 5-day Tokyo trip in October with a $1800 budget "
+                "for food and anime spots."
+            ),
+            height=130,
+            label_visibility="collapsed",
+        )
 
-def _parse_interests(text: str) -> list:
-    """Extract sports, music, movies from user text (comma/and/or)."""
-    text = (text or "").lower()
-    found = []
-    if re.search(r"\bsports?\b", text):
-        found.append("sports")
-    if re.search(r"\bmusic\b", text):
-        found.append("music")
-    if re.search(r"\bmovies?\b|\bfilm(s)?\b", text):
-        found.append("movies")
-    return found if found else ["music", "sports", "movies"]
+    if st.button("Generate Plan", type="primary"):
+        # region agent log
+        _debug_log(
+            run_id="run1",
+            hypothesis_id="H0",
+            location="app.py:main:button",
+            message="Generate Plan clicked",
+            data={"prompt_length": len(user_prompt or "")},
+        )
+        # endregion
+        if not user_prompt.strip():
+            st.warning("Please provide your trip preferences.")
+            st.stop()
 
+        try:
+            settings = Settings.from_env()
+            pipeline = TravelPlannerPipeline(settings=settings)
+            plan = pipeline.run(user_input=user_prompt)
+        except Exception as exc:
+            # region agent log
+            _debug_log(
+                run_id="run1",
+                hypothesis_id="H0",
+                location="app.py:main:exception",
+                message="Pipeline exception",
+                data={"error_type": type(exc).__name__, "error_text": str(exc)[:400]},
+            )
+            # endregion
+            st.error(f"Could not generate plan: {exc}")
+            st.stop()
 
-def _content_to_text(content) -> str:
-    """Extract plain text from Gradio content (string or list of blocks like [{"text": "...", "type": "text"}])."""
-    if content is None:
-        return ""
-    if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, dict) and "text" in block:
-                parts.append(str(block["text"]).strip())
-            else:
-                parts.append(str(block).strip())
-        return " ".join(parts).strip()
-    return str(content).strip()
+        st.success("Travel plan generated.")
 
+        tab_overview, tab_itinerary, tab_logistics, tab_budget, tab_export = st.tabs(
+            ["Overview", "Itinerary", "Logistics", "Budget", "Export"]
+        )
 
-def _get_user_text(message) -> str:
-    """Get plain text from user message (string or Gradio message dict)."""
-    if message is None:
-        return ""
-    if isinstance(message, str):
-        return message.strip()
-    if isinstance(message, dict) and "content" in message:
-        return _content_to_text(message["content"])
-    return _content_to_text(message)
+        with tab_overview:
+            render_profile_summary(plan)
+            st.divider()
+            render_destination_insights(plan)
 
+        with tab_itinerary:
+            render_itinerary_browser(plan)
+            st.divider()
+            render_itinerary_timeline(plan)
 
-def chat(message, history):
-    """Two-step: 1) city -> ask interests, 2) interests -> top 10 events."""
-    text = _get_user_text(message)
-    if not text:
-        return "Please enter a city name."
+        with tab_logistics:
+            render_logistics(plan)
 
-    user_msgs = []
-    if history:
-        for h in history:
-            if isinstance(h, dict) and h.get("role") == "user":
-                user_msgs.append(_content_to_text(h.get("content")))
+        with tab_budget:
+            st.subheader("Budget Breakdown")
+            st.table(itinerary_cost_table(plan.itinerary))
+            st.pyplot(build_budget_chart(plan.itinerary), use_container_width=True)
 
-    if len(user_msgs) == 0:
-        # First message = city
-        city = get_city(text)
-        if not city:
-            return "Could not understand the city name. Please try again."
-        return INTERESTS_PROMPT.format(city=city)
-
-    # Second message = interests
-    city = get_city(user_msgs[0])
-    if not city:
-        city = user_msgs[0]
-    interests = _parse_interests(text)
-    try:
-        events = get_events_by_interests(city, interests, max_events=TOP_N)
-    except Exception as e:
-        return f"Could not load events: {e}"
-
-    if not events:
-        return f"## Events in {city}\n\n_No events found for your interests._"
-
-    md = f"## Top {TOP_N} events in {city}\n\n" + _flat_events_to_markdown(events)
-    return md
+        with tab_export:
+            render_export_summary(plan)
+            html_file = Path(plan.html_path)
+            if html_file.exists():
+                st.download_button(
+                    label="Download HTML Travel Plan",
+                    data=html_file.read_text(encoding="utf-8"),
+                    file_name="travel_plan.html",
+                    mime="text/html",
+                )
 
 
 if __name__ == "__main__":
-    with gr.Blocks() as demo:
-        gr.Markdown("# EventAIde")
-        chatbot = gr.Chatbot(
-            value=[{"role": "assistant", "content": WELCOME}],
-            height=400,
-        )
-        msg = gr.Textbox(placeholder="Type a city name, then your interests (e.g. music, sports)...", label="Message", show_label=False)
-        clear = gr.Button("Clear")
+    main()
 
-        def respond(message, history):
-            if not (message and str(message).strip()):
-                return history, ""
-            reply = chat(message, history)
-            new_history = list(history) if history else [{"role": "assistant", "content": WELCOME}]
-            new_history.append({"role": "user", "content": message})
-            new_history.append({"role": "assistant", "content": reply})
-            return new_history, ""
-
-        def clear_chat():
-            return [{"role": "assistant", "content": WELCOME}], ""
-
-        msg.submit(respond, [msg, chatbot], [chatbot, msg])
-        clear.click(clear_chat, None, [chatbot, msg])
-    demo.launch()
