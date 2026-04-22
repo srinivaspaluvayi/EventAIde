@@ -2,13 +2,28 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from travel_planner.models.schemas import DestinationInfo, Itinerary, Logistics, TravelProfile
+from travel_planner.models.schemas import DestinationInfo, FlightOption, HotelOption, Itinerary, Logistics, TravelProfile
 from travel_planner.utils.llm import SmallModelClient
 
 
 SYSTEM_PROMPT = """
 You are Agent 4 (Logistics Agent).
-Generate practical logistics in strict JSON with keys:
+Mission: create practical travel logistics that make the itinerary executable.
+
+Workflow:
+1) Recommend accommodation options aligned to budget and group needs.
+2) Suggest local transport tactics based on city style and trip pace.
+3) Generate packing guidance based on weather and planned activity mix.
+
+Quality rules:
+- recommendations must be actionable, not generic filler
+- avoid repeating nearly identical bullets
+- prioritize reliability and convenience over novelty
+
+Output policy:
+- JSON only
+- no markdown
+- return exactly these keys:
 accommodation_options, local_transport, packing_tips
 """
 
@@ -17,13 +32,22 @@ class LogisticsAgent:
     def __init__(self, llm: SmallModelClient) -> None:
         self.llm = llm
 
-    def run(self, profile: TravelProfile, destination_info: DestinationInfo, itinerary: Itinerary) -> Logistics:
+    def run(
+        self,
+        profile: TravelProfile,
+        destination_info: DestinationInfo,
+        itinerary: Itinerary,
+        hotels: list[HotelOption] | None = None,
+        flights: list[FlightOption] | None = None,
+    ) -> Logistics:
         prompt = (
             f"Destination: {profile.destination}\n"
             f"Budget USD: {profile.budget_usd}\n"
             f"Group size: {profile.group_size}\n"
             f"Weather: {destination_info.weather_summary}\n"
-            f"Days planned: {len(itinerary.days)}"
+            f"Days planned: {len(itinerary.days)}\n"
+            f"Hotel suggestions: {', '.join(h.name for h in (hotels or [])[:3])}\n"
+            f"Flight notes: {', '.join(f.notes for f in (flights or [])[:2])}"
         )
         fallback = {
             "accommodation_options": [
@@ -47,6 +71,12 @@ class LogisticsAgent:
             parsed = fallback
         merged = {**fallback, **parsed} if isinstance(parsed, dict) else fallback
         merged = self._normalize_payload(merged, fallback)
+        if hotels:
+            merged["accommodation_options"] = [
+                f"{h.name} ({h.area}) - {h.price_range_usd}" for h in hotels[:3]
+            ] + merged["accommodation_options"]
+        if flights:
+            merged["local_transport"] = [f"Flight note: {f.notes}" for f in flights[:2]] + merged["local_transport"]
         return Logistics(**merged)
 
     def _normalize_payload(self, merged: Dict[str, Any], fallback: Dict[str, Any]) -> Dict[str, Any]:

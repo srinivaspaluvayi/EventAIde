@@ -14,6 +14,8 @@ class Settings:
     openai_api_key: str
     openai_model: str = "gpt-4o-mini"
     max_search_results: int = 6
+    serpapi_key: str = ""
+    foursquare_api_key: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -30,5 +32,7 @@ class Settings:
             openai_api_key=api_key,
             openai_model=model,
             max_search_results=max_results,
+            serpapi_key=os.getenv("SERPAPI_API_KEY", "").strip(),
+            foursquare_api_key=os.getenv("FOURSQUARE_API_KEY", "").strip(),
         )
 

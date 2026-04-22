@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+import re
 from typing import Any, Dict, List
 
 from travel_planner.models.schemas import TravelProfile
@@ -9,11 +10,32 @@ from travel_planner.utils.llm import SmallModelClient
 
 SYSTEM_PROMPT = """
 You are Agent 1 (Preference Collector).
-Extract travel preferences into strict JSON.
-If data is missing, add concise clarifying questions.
-Return JSON only with keys:
+Mission: convert free-form travel intent into a complete structured profile.
+
+Workflow:
+1) Extract core fields:
+- destination
+- start/end dates
+- budget
+- travel style
+- interests
+- group size
+2) Normalize values:
+- dates in YYYY-MM-DD
+- budget numeric in USD
+- interests as clean list tokens
+3) Identify missing/ambiguous fields and ask targeted clarifying questions.
+
+Clarifying question policy:
+- ask only high-impact questions
+- keep questions short and specific
+- avoid asking for information already explicit in input
+
+Output policy:
+- JSON only
+- no markdown
+- return exactly these keys:
 destination, start_date, end_date, budget_usd, travel_style, interests, group_size, clarifying_questions
-Dates must be ISO format YYYY-MM-DD.
 """
 
 
@@ -23,11 +45,12 @@ class PreferenceCollectorAgent:
 
     def run(self, user_input: str) -> TravelProfile:
         today = date.today()
+        inferred_budget = self._extract_budget_from_text(user_input)
         fallback = {
             "destination": "Tokyo",
             "start_date": str(today + timedelta(days=30)),
             "end_date": str(today + timedelta(days=34)),
-            "budget_usd": 1500,
+            "budget_usd": inferred_budget if inferred_budget is not None else 2200,
             "travel_style": "balanced",
             "interests": ["food", "culture"],
             "group_size": 1,
@@ -53,7 +76,7 @@ class PreferenceCollectorAgent:
         for key in ("start_date", "end_date"):
             value = parsed.get(key)
             if isinstance(value, str) and value.strip():
-                payload[key] = value.strip()
+                payload[key] = self._normalize_date_str(value.strip(), fallback[key])
 
         budget_value = parsed.get("budget_usd")
         if isinstance(budget_value, (int, float)) and budget_value > 0:
@@ -97,4 +120,34 @@ class PreferenceCollectorAgent:
         if isinstance(clarifying, str) and clarifying.strip():
             return [clarifying.strip()]
         return []
+
+    def _normalize_date_str(self, value: str, fallback_date: str) -> str:
+        candidate = value[:10]
+        try:
+            parsed = datetime.strptime(candidate, "%Y-%m-%d").date()
+            return str(parsed)
+        except Exception:
+            return fallback_date
+
+    def _extract_budget_from_text(self, text: str) -> float | None:
+        raw = (text or "").lower()
+        if not raw.strip():
+            return None
+
+        # Matches patterns like "$1500", "1500 usd", "budget 2k", "under 1.8k"
+        match = re.search(
+            r"(?:\$|usd\s*|budget\s*(?:is|of|under|around|about)?\s*)?(\d+(?:\.\d+)?)\s*(k|usd)?",
+            raw,
+        )
+        if not match:
+            return None
+
+        value = float(match.group(1))
+        suffix = match.group(2) or ""
+        if suffix == "k":
+            value *= 1000
+
+        if 100 <= value <= 100000:
+            return round(value, 2)
+        return None
 

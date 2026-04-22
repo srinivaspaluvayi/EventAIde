@@ -8,3 +8,5 @@ beautifulsoup4
 requests
 matplotlib
 pytest
+fastapi
+uvicorn

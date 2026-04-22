@@ -88,13 +88,26 @@ def render_html(
             padding: 24px;
           }}
           .hero {{
-            background: linear-gradient(120deg, #0f172a 0%, #1d4ed8 100%);
+            background: radial-gradient(circle at top left, #1d4ed8 0%, #0f172a 55%);
             color: white;
             border-radius: 16px;
             padding: 22px;
             margin-bottom: 16px;
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.22);
           }}
           .hero h1 {{ margin: 0 0 8px 0; font-size: 1.8rem; }}
+          .flow-row {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+          }}
+          .flow-pill {{
+            font-size: 0.76rem;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.2);
+          }}
           .grid {{
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -138,6 +151,7 @@ def render_html(
             border-radius: 12px;
             padding: 12px;
             margin-bottom: 10px;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
           }}
           .day-header {{
             display: flex;
@@ -168,6 +182,11 @@ def render_html(
           }}
           th {{ background: #eff6ff; }}
           .right {{ text-align: right; }}
+          .foot-note {{
+            margin-top: 10px;
+            font-size: 0.82rem;
+            color: var(--muted);
+          }}
           @media (max-width: 860px) {{
             .grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
             .columns {{ grid-template-columns: 1fr; }}
@@ -183,7 +202,14 @@ def render_html(
         <main class="wrap">
           <section class="hero">
             <h1>{_escape(itinerary.trip_title)}</h1>
-            <p>Personalized itinerary generated from preferences, destination insights, and budget constraints.</p>
+            <p>TripForge AI report generated from traveler preferences, destination insights, and budget constraints.</p>
+            <div class="flow-row">
+              <span class="flow-pill">Preferences</span>
+              <span class="flow-pill">Research</span>
+              <span class="flow-pill">Itinerary</span>
+              <span class="flow-pill">Logistics</span>
+              <span class="flow-pill">Export</span>
+            </div>
           </section>
           <section class="grid">
             <div class="kpi"><div class="label">Destination</div><div class="value">{_escape(profile.destination)}</div></div>
@@ -237,6 +263,7 @@ def render_html(
                 <tr><th>Total</th><th class="right">${itinerary.estimated_total_usd:.2f}</th></tr>
               </tbody>
             </table>
+            <p class="foot-note">All costs are estimates and may vary by season, provider availability, and booking window.</p>
           </section>
         </main>
       </body>

@@ -53,10 +53,45 @@ class Logistics(BaseModel):
     packing_tips: List[str]
 
 
+class FlightOption(BaseModel):
+    route: str
+    airline: str
+    estimated_cost_usd: float = Field(..., ge=0)
+    notes: str
+
+
+class HotelOption(BaseModel):
+    name: str
+    area: str
+    price_range_usd: str
+    highlights: List[str] = Field(default_factory=list)
+
+
+class FoodOption(BaseModel):
+    name: str
+    cuisine: str
+    price_level: str
+    notes: str
+
+
+class BudgetPlan(BaseModel):
+    transportation_usd: float = Field(..., ge=0)
+    stay_usd: float = Field(..., ge=0)
+    food_usd: float = Field(..., ge=0)
+    activities_usd: float = Field(..., ge=0)
+    buffer_usd: float = Field(..., ge=0)
+    total_planned_usd: float = Field(..., ge=0)
+    optimization_tips: List[str] = Field(default_factory=list)
+
+
 class FinalPlan(BaseModel):
     profile: TravelProfile
     destination_info: DestinationInfo
     itinerary: Itinerary
     logistics: Logistics
+    flights: List[FlightOption] = Field(default_factory=list)
+    hotels: List[HotelOption] = Field(default_factory=list)
+    dining: List[FoodOption] = Field(default_factory=list)
+    budget_plan: BudgetPlan | None = None
     html_path: str
 
