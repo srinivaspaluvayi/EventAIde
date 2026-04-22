@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import html as html_lib
-import json
-import time
 from pathlib import Path
 
 from travel_planner.models.schemas import DestinationInfo, Itinerary, Logistics, TravelProfile
@@ -15,55 +13,21 @@ def render_html(
     logistics: Logistics,
     output_path: str = "output/travel_plan.html",
 ) -> str:
-    def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
-        payload = {
-            "sessionId": "39ed9e",
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000),
-        }
-        log_path = Path("/Volumes/External/Drive_C/EventAIde/.cursor/debug-39ed9e.log")
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
-
-    # region agent log
-    _debug_log(
-        run_id="run2",
-        hypothesis_id="H1",
-        location="html_renderer.py:render_html:start",
-        message="render_html entered",
-        data={"trip_title_len": len(itinerary.trip_title), "days_count": len(itinerary.days)},
-    )
-    # endregion
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     duration_days = (profile.end_date - profile.start_date).days + 1
 
     def _escape(value: str) -> str:
-        # region agent log
-        _debug_log(
-            run_id="run2",
-            hypothesis_id="H2",
-            location="html_renderer.py:render_html:escape",
-            message="escape called",
-            data={"value_len": len(value) if isinstance(value, str) else -1},
-        )
-        # endregion
         return html_lib.escape(value, quote=True)
 
     def _list_items(values: list[str]) -> str:
         return "".join(f"<li>{_escape(item)}</li>" for item in values) if values else "<li>Not specified</li>"
 
     days_html = []
-    try:
-        for day in itinerary.days:
-            days_html.append(
-                f"""
+    for day in itinerary.days:
+        days_html.append(
+            f"""
             <section class="day-card">
               <div class="day-header">
                 <h3>Day {day.day}</h3>
@@ -88,18 +52,7 @@ def render_html(
               </div>
             </section>
             """
-            )
-    except Exception as exc:
-        # region agent log
-        _debug_log(
-            run_id="run2",
-            hypothesis_id="H3",
-            location="html_renderer.py:render_html:days_exception",
-            message="exception during day card rendering",
-            data={"error_type": type(exc).__name__, "error_text": str(exc)[:240]},
         )
-        # endregion
-        raise
 
     budget_rows = "".join(
         f"<tr><td>Day {day.day}</td><td>${day.day_total_usd:.2f}</td></tr>"

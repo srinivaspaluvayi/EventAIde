@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
-import json
-import time
 
 import streamlit as st
 
@@ -28,22 +26,6 @@ from travel_planner.ui.components import (
 from travel_planner.utils.costing import itinerary_cost_table
 
 
-def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
-    payload = {
-        "sessionId": "39ed9e",
-        "runId": run_id,
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data,
-        "timestamp": int(time.time() * 1000),
-    }
-    log_path = Path("/Volumes/External/Drive_C/EventAIde/.cursor/debug-39ed9e.log")
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(payload, ensure_ascii=True) + "\n")
-
-
 def main() -> None:
     st.set_page_config(page_title="AI Travel Planner", layout="wide")
     inject_custom_css()
@@ -63,15 +45,6 @@ def main() -> None:
         )
 
     if st.button("Generate Plan", type="primary"):
-        # region agent log
-        _debug_log(
-            run_id="run1",
-            hypothesis_id="H0",
-            location="app.py:main:button",
-            message="Generate Plan clicked",
-            data={"prompt_length": len(user_prompt or "")},
-        )
-        # endregion
         if not user_prompt.strip():
             st.warning("Please provide your trip preferences.")
             st.stop()
@@ -81,15 +54,6 @@ def main() -> None:
             pipeline = TravelPlannerPipeline(settings=settings)
             plan = pipeline.run(user_input=user_prompt)
         except Exception as exc:
-            # region agent log
-            _debug_log(
-                run_id="run1",
-                hypothesis_id="H0",
-                location="app.py:main:exception",
-                message="Pipeline exception",
-                data={"error_type": type(exc).__name__, "error_text": str(exc)[:400]},
-            )
-            # endregion
             st.error(f"Could not generate plan: {exc}")
             st.stop()
 
