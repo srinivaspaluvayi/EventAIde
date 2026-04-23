@@ -14,6 +14,8 @@ class TravelProfile(BaseModel):
     travel_style: str
     interests: List[str]
     group_size: int = Field(..., ge=1, le=20)
+    departure_id: str = ""
+    arrival_id: str = ""
     clarifying_questions: List[str] = Field(default_factory=list)
 
 

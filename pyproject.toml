@@ -13,6 +13,7 @@ dependencies = [
     "ddgs",
     "beautifulsoup4",
     "requests",
+    "serpapi",
     "matplotlib",
     "fastapi",
     "uvicorn",

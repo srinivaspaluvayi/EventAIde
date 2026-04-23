@@ -3,7 +3,7 @@ from __future__ import annotations
 import html
 import streamlit as st
 
-from travel_planner.models.schemas import FinalPlan, FoodOption
+from travel_planner.models.schemas import FinalPlan, FlightOption, FoodOption
 
 
 def _dining_row_source(notes: str) -> str:
@@ -216,6 +216,54 @@ def render_destination_insights(plan: FinalPlan) -> None:
         st.markdown("### Travel Essentials")
         st.markdown(f'<div class="card-panel"><b>Visa:</b> {info.visa_requirements}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="card-panel"><b>Weather:</b> {info.weather_summary}</div>', unsafe_allow_html=True)
+
+
+def _flight_row_source(notes: str) -> str:
+    n = notes or ""
+    if "[source:provider:serpapi]" in n:
+        return "SerpAPI"
+    if "[source:fallback:llm]" in n:
+        return "LLM fallback"
+    return "Unknown"
+
+
+def _flight_plan_summary(flights: list[FlightOption]) -> str:
+    if not flights:
+        return "No flight rows returned."
+    serp = sum(1 for f in flights if "[source:provider:serpapi]" in (f.notes or ""))
+    llm = sum(1 for f in flights if "[source:fallback:llm]" in (f.notes or ""))
+    if llm == 0 and serp > 0:
+        return f"All **{len(flights)}** options are **SerpAPI / Google Flights** estimates."
+    if serp == 0:
+        return f"All **{len(flights)}** options are **LLM fallback** (SerpAPI flights not configured or no results)."
+    return f"**Mixed:** {serp} SerpAPI, {llm} LLM fallback."
+
+
+def render_flights_picks(plan: FinalPlan) -> None:
+    st.markdown("### Flight options")
+    flights = plan.flights or []
+    st.markdown(_flight_plan_summary(flights))
+    if not flights:
+        st.caption("Set `SERPAPI_API_KEY`, `FLIGHT_DEPARTURE_ID`, and `FLIGHT_ARRIVAL_ID` (or IATA in destination) for live Google Flights bundles.")
+        return
+    for idx, f in enumerate(flights, start=1):
+        src = _flight_row_source(f.notes or "")
+        badge_class = "badge" if src == "SerpAPI" else "cost-badge"
+        route = html.escape(f.route)
+        airline = html.escape(f.airline)
+        notes = html.escape(f.notes or "")
+        src_e = html.escape(src)
+        st.markdown(
+            f"""
+            <div class="activity-card">
+                <b>{idx}. {route}</b>
+                <span class="{badge_class}" style="margin-left:0.35rem;">{src_e}</span><br/>
+                <span class="activity-detail">{airline} · est. ${f.estimated_cost_usd:,.0f}</span><br/>
+                <span class="activity-detail">{notes}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def render_dining_picks(plan: FinalPlan) -> None:

@@ -63,7 +63,10 @@ Optional:
 - `OPENAI_MODEL=gpt-4o-mini`
 - `MAX_SEARCH_RESULTS=6`
 - `TRIPFORGE_BACKEND_URL=http://127.0.0.1:8000`
-- `SERPAPI_API_KEY` (for real hotel search integration)
+- `SERPAPI_API_KEY` (for [Google Hotels](https://serpapi.com/google-hotels-api) and optional [Google Flights](https://serpapi.com/google-flights-api) via SerpAPI)
+- `FLIGHT_DEPARTURE_ID` — IATA departure airport (e.g. `LAX`) when using SerpAPI flight bundles; required together with `SERPAPI_API_KEY` for provider-backed flights
+- `FLIGHT_ARRIVAL_ID` — optional IATA arrival override; otherwise the first `AAA` pattern in the trip destination string is used (e.g. `Chicago ORD` → `ORD`)
+- `FLIGHT_MAX_RESULTS` (optional, default `12`, clamped 5–25) — max flight bundles from SerpAPI before LLM cap
 - `GEOAPIFY_API_KEY` — [Geoapify](https://www.geoapify.com/) key for dining POIs ([Places API](https://apidocs.geoapify.com/docs/places/) + [Geocoding](https://apidocs.geoapify.com/docs/geocoding/); OSM-backed data). If unset, dining falls back to the LLM.
 - `GEOAPIFY_DINING_RADIUS_M` (optional, default `8000`, clamped 1000–50000) — search radius in meters around the geocoded destination
 - `DINING_MAX_RESULTS` (optional, default `30`, clamped 5–100) — max dining options returned from Geoapify / LLM before any future filtering you add

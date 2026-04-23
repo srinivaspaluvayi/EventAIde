@@ -3,6 +3,8 @@ from __future__ import annotations
 from travel_planner.agents.destination_research import DestinationResearchAgent
 from travel_planner.agents.dining_agent import DiningAgent
 from travel_planner.agents.flight_search_agent import FlightSearchAgent
+from travel_planner.providers.flight_provider import NullFlightProvider
+from travel_planner.providers.serpapi_flight_provider import SerpApiFlightProvider
 from travel_planner.agents.hotel_search_agent import HotelSearchAgent
 from travel_planner.agents.itinerary_planner import ItineraryPlannerAgent
 from travel_planner.agents.logistics_agent import LogisticsAgent
@@ -28,7 +30,22 @@ class TravelPlannerPipeline:
         llm = SmallModelClient(api_key=settings.openai_api_key, model=settings.openai_model)
         self.preference_agent = PreferenceCollectorAgent(llm)
         self.research_agent = DestinationResearchAgent(llm, max_search_results=settings.max_search_results)
-        self.flight_agent = FlightSearchAgent(llm)
+        if settings.serpapi_key and settings.flight_departure_id:
+            flight_provider = SerpApiFlightProvider(
+                api_key=settings.serpapi_key,
+                departure_id=settings.flight_departure_id,
+                arrival_id_override=settings.flight_arrival_id,
+                max_results=settings.flight_max_results,
+            )
+        else:
+            if settings.serpapi_key and not settings.flight_departure_id:
+                self.logger.warning(
+                    "SERPAPI_API_KEY set but FLIGHT_DEPARTURE_ID empty; flight search uses LLM fallback"
+                )
+            flight_provider = NullFlightProvider()
+        self.flight_agent = FlightSearchAgent(
+            llm, provider=flight_provider, max_results=settings.flight_max_results
+        )
         self.hotel_agent = HotelSearchAgent(llm, provider=SerpApiHotelProvider(api_key=settings.serpapi_key))
         if settings.geoapify_api_key:
             dining_provider = GeoapifyDiningProvider(

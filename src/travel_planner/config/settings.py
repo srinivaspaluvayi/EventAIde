@@ -23,6 +23,9 @@ class Settings:
     geoapify_api_key: str = ""
     geoapify_dining_radius_m: int = 8000
     dining_max_results: int = 30
+    flight_departure_id: str = ""
+    flight_arrival_id: str = ""
+    flight_max_results: int = 12
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -43,6 +46,10 @@ class Settings:
         dining_max = int(dining_raw) if dining_raw.isdigit() else 30
         dining_max = max(5, min(dining_max, 100))
 
+        flight_max_raw = os.getenv("FLIGHT_MAX_RESULTS", "12").strip()
+        flight_max = int(flight_max_raw) if flight_max_raw.isdigit() else 12
+        flight_max = max(5, min(flight_max, 25))
+
         return cls(
             openai_api_key=api_key,
             openai_model=model,
@@ -51,4 +58,7 @@ class Settings:
             geoapify_api_key=os.getenv("GEOAPIFY_API_KEY", "").strip(),
             geoapify_dining_radius_m=geo_radius,
             dining_max_results=dining_max,
+            flight_departure_id=os.getenv("FLIGHT_DEPARTURE_ID", "").strip().upper(),
+            flight_arrival_id=os.getenv("FLIGHT_ARRIVAL_ID", "").strip().upper(),
+            flight_max_results=flight_max,
         )
