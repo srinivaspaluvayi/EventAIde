@@ -36,8 +36,9 @@ from travel_planner.config.settings import Settings
 from travel_planner.providers.dining_provider import NullDiningProvider
 from travel_planner.providers.flight_provider import NullFlightProvider
 from travel_planner.providers.geoapify_dining_provider import GeoapifyDiningProvider
+from travel_planner.providers.geoapify_hotel_provider import GeoapifyHotelProvider
+from travel_planner.providers.hotel_provider import NullHotelProvider
 from travel_planner.providers.serpapi_flight_provider import SerpApiFlightProvider
-from travel_planner.providers.serpapi_hotel_provider import SerpApiHotelProvider
 from travel_planner.utils.llm import SmallModelClient
 
 
@@ -111,16 +112,22 @@ def main() -> int:
             max_results=settings.dining_max_results,
         )
         dining_backend = "GeoapifyDiningProvider"
+        hotel_provider = GeoapifyHotelProvider(
+            api_key=settings.geoapify_api_key,
+            radius_m=settings.geoapify_dining_radius_m,
+        )
+        hotel_backend = "GeoapifyHotelProvider"
     else:
         dining_provider = NullDiningProvider()
+        hotel_provider = NullHotelProvider()
         dining_backend = "NullDiningProvider (set GEOAPIFY_API_KEY)"
+        hotel_backend = "NullHotelProvider (set GEOAPIFY_API_KEY)"
 
     if settings.serpapi_key and settings.flight_departure_id:
         flight_provider = SerpApiFlightProvider(
             api_key=settings.serpapi_key,
             departure_id=settings.flight_departure_id,
             arrival_id_override=settings.flight_arrival_id,
-            max_results=settings.flight_max_results,
         )
         flight_backend = "SerpApiFlightProvider"
     else:
@@ -131,7 +138,7 @@ def main() -> int:
     print(
         f"model={settings.openai_model!r} flight_backend={flight_backend} "
         f"flight_max={settings.flight_max_results} | dining_backend={dining_backend} "
-        f"dining_max_results={settings.dining_max_results}"
+        f"dining_max_results={settings.dining_max_results} | hotel_backend={hotel_backend}"
     )
     print()
 
@@ -162,9 +169,7 @@ def main() -> int:
         if stop_after == "flight":
             return 0
 
-        hotels = HotelSearchAgent(llm, provider=SerpApiHotelProvider(api_key=settings.serpapi_key)).run(
-            profile=profile
-        )
+        hotels = HotelSearchAgent(llm, provider=hotel_provider).run(profile=profile)
         _line("OK" if hotels else "EMPTY", "HotelSearch", f"n={len(hotels)}")
         if stop_after == "hotel":
             return 0

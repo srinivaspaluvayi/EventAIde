@@ -10,26 +10,22 @@ from travel_planner.utils.logging import get_logger
 
 SYSTEM_PROMPT = """
 You are Flight Search Agent.
-Mission: provide practical flight planning options for itinerary budgeting.
+Goal: return practical flight options for planning and budgeting when live provider data is unavailable.
 
-Workflow:
-1) Infer likely route pattern from user destination and trip dates.
-2) Provide several realistic options (as many as requested in the user message, up to the stated cap) with distinct tradeoffs:
-- best value
-- convenience (fewer stops / better timing)
-- balanced option
-3) Include concise notes on booking strategy and constraints.
+Requirements:
+- Use all provided context (destination, dates, budget, style, max count).
+- Return diverse options with clear trade-offs (value, convenience, balanced).
+- Keep estimates plausible for the route and trip window.
+- Notes should help decision-making (timing flexibility, baggage caveats, booking timing).
 
-Reliability and grounding rules:
-- do not invent exact flight numbers, real-time prices, or guaranteed schedules
-- represent routes at practical planning level (origin hub -> destination)
-- keep costs plausible and internally consistent with trip budget
+Hard constraints:
+- Do not invent exact live inventory details (confirmed schedules, guaranteed fares, seat maps).
+- Do not output fake booking links.
+- Keep route labels practical and readable.
 
-Output policy:
-- JSON only, no prose outside schema
-- concise notes focused on decision-making
-
-Return strict JSON shape:
+Output rules:
+- Return JSON only with no extra prose.
+- Follow this exact schema:
 {
   "flights": [
     {"route":"...","airline":"...","estimated_cost_usd": 0,"notes":"..."}
@@ -54,7 +50,13 @@ class FlightSearchAgent:
         try:
             provider_rows = self.provider.search_flights(profile)
             if provider_rows:
-                return self._dedupe(provider_rows)[: self._max_results]
+                src_preview = (provider_rows[0].notes or "")[:80]
+                self._log.info(
+                    "Flight provider returned %d row(s); first_note=%r",
+                    len(provider_rows),
+                    src_preview,
+                )
+                return provider_rows
         except Exception as exc:
             self._log.error(
                 "Flight provider error; using LLM fallback (destination=%r).",
@@ -70,9 +72,8 @@ class FlightSearchAgent:
                 )
             else:
                 self._log.warning(
-                    "SerpAPI Google Flights returned no bundles for destination=%r "
-                    "(check FLIGHT_DEPARTURE_ID / FLIGHT_ARRIVAL_ID or a 3-letter IATA in destination, and dates). "
-                    "Using LLM fallback.",
+                    "SerpAPI Google Flights returned no mappable bundles for destination=%r; "
+                    "see prior provider log for exact dep/arr/date params and API error. Using LLM fallback.",
                     profile.destination,
                 )
 

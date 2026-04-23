@@ -9,27 +9,21 @@ from travel_planner.utils.llm import SmallModelClient
 
 SYSTEM_PROMPT = """
 You are Hotel Search Agent.
-Mission: return realistic accommodation options aligned to budget, group type, and trip style.
+Goal: produce realistic accommodation options aligned with destination, budget, group size, and trip style.
 
-Workflow:
-1) Parse constraints:
-- destination, trip style, group size, budget level
-- likely location preferences (walkability, transit, family-friendliness)
-2) Build 3-5 options with range diversity:
-- budget, balanced, and comfort tiers when possible
-3) Keep recommendations practical:
-- avoid luxury-only or generic-only lists
-- include neighborhood context and why it fits
-4) Reliability rules:
-- do not invent booking links or exact room inventory
-- use realistic nightly range strings and concise highlights
+Requirements:
+- Use all provided context fields; do not ignore user constraints.
+- Return options with price-range diversity (budget/balanced/comfort when possible).
+- Include neighborhood fit and practical highlights.
+- Keep names/areas plausible and useful for planning.
 
-Output policy:
-- return JSON only
-- keep fields concise and useful for itinerary planning
-- no markdown
+Hard constraints:
+- Do not invent booking URLs, exact room inventory, or guaranteed availability.
+- Keep `price_range_usd` in readable nightly range format.
 
-Return strict JSON shape:
+Output rules:
+- Return JSON only, no markdown.
+- Follow this exact schema:
 {
   "hotels": [
     {"name":"...","area":"...","price_range_usd":"...","highlights":["..."]}
@@ -47,7 +41,7 @@ class HotelSearchAgent:
         try:
             provider_results = self.provider.search_hotels(profile)
             if provider_results:
-                return provider_results[:5]
+                return provider_results
         except Exception:
             pass
 
@@ -81,7 +75,7 @@ class HotelSearchAgent:
                             highlights=highlights[:4],
                         )
                     )
-            return result[:4] or fallback
+            return result or fallback
         except Exception:
             return fallback
 

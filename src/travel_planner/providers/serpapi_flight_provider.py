@@ -6,8 +6,10 @@ from typing import List
 
 import serpapi
 
+from travel_planner.config.defaults import DEFAULT_ARRIVAL_ID, DEFAULT_DEPARTURE_ID
 from travel_planner.models.schemas import FlightOption, TravelProfile
 from travel_planner.providers.serpapi_util import serpapi_search_api_error
+from travel_planner.utils.us_airports import normalize_us_iata
 from travel_planner.utils.logging import get_logger
 
 
@@ -23,7 +25,6 @@ class SerpApiFlightProvider:
     departure_id: str
     arrival_id_override: str = ""
     timeout_seconds: int = 25
-    max_results: int = 12
 
     def __post_init__(self) -> None:
         self._log = get_logger("travel_planner.serpapi_flights")
@@ -42,20 +43,29 @@ class SerpApiFlightProvider:
                 "SerpAPI flights skipped: set FLIGHT_ARRIVAL_ID or include a 3-letter IATA code in destination (e.g. ORD)."
             )
             return []
+        self._log.info(
+            "SerpAPI flight resolved inputs: dep=%s arr=%s dates=%s..%s pax=%s",
+            dep,
+            arrival,
+            profile.start_date,
+            profile.end_date,
+            max(profile.group_size, 1),
+        )
         params: dict[str, str | int] = {
             "engine": "google_flights",
             "departure_id": dep,
             "arrival_id": arrival,
             "outbound_date": str(profile.start_date),
+            "return_date": str(profile.end_date),
             "currency": "USD",
             "hl": "en",
             "adults": max(profile.group_size, 1),
         }
         if profile.end_date > profile.start_date:
             params["type"] = "1"
-            params["return_date"] = str(profile.end_date)
         else:
             params["type"] = "2"
+            params.pop("return_date", None)
 
         self._log.debug("SerpAPI google_flights search params (api_key via client only): %s", params)
         try:
@@ -63,52 +73,86 @@ class SerpApiFlightProvider:
         except serpapi.SerpApiError as exc:
             self._log.warning("SerpAPI flight search failed: %s", exc)
             return []
+        payload_full = payload.as_dict() if hasattr(payload, "as_dict") else payload
+        self._log.info(
+            "SerpAPI flight payload diagnostics: type=%s has_get=%s payload=%r",
+            type(payload).__name__,
+            hasattr(payload, "get"),
+            payload_full,
+        )
 
         api_err = serpapi_search_api_error(payload)
         if api_err:
-            self._log.warning("SerpAPI flight search returned API error: %s", api_err)
+            self._log.warning(
+                "SerpAPI flight API error: %s | dep=%s arr=%s outbound=%s return=%s type=%s",
+                api_err,
+                params.get("departure_id"),
+                params.get("arrival_id"),
+                params.get("outbound_date"),
+                params.get("return_date"),
+                params.get("type"),
+            )
             return []
 
         bundles: list[dict] = []
+        best_n = 0
+        other_n = 0
         for key in ("best_flights", "other_flights"):
             raw = payload.get(key)
             if isinstance(raw, list):
+                if key == "best_flights":
+                    best_n = len(raw)
+                if key == "other_flights":
+                    other_n = len(raw)
                 bundles.extend([b for b in raw if isinstance(b, dict)])
+        self._log.info(
+            "SerpAPI flight payload summary: best=%s other=%s merged=%s",
+            best_n,
+            other_n,
+            len(bundles),
+        )
         results: List[FlightOption] = []
-        seen: set[tuple[str, str, float]] = set()
+        dropped_no_price = 0
+        dropped_no_legs = 0
         for bundle in bundles:
             opt = self._bundle_to_option(bundle, profile, dep, arrival)
             if opt is None:
+                if not isinstance(bundle.get("flights"), list) or not bundle.get("flights"):
+                    dropped_no_legs += 1
+                else:
+                    dropped_no_price += 1
                 continue
-            sig = (opt.route.lower(), opt.airline.lower(), round(opt.estimated_cost_usd, 2))
-            if sig in seen:
-                continue
-            seen.add(sig)
             results.append(opt)
-            if len(results) >= self.max_results:
-                break
+        self._log.info(
+            "SerpAPI flight mapping summary: kept=%s dropped_no_legs=%s dropped_no_price=%s",
+            len(results),
+            dropped_no_legs,
+            dropped_no_price,
+        )
         return results
 
     def _resolve_departure_id(self, profile: TravelProfile) -> str:
-        p = (profile.departure_id or "").strip().upper()
-        if re.fullmatch(r"[A-Z]{3}", p):
+        p = normalize_us_iata(profile.departure_id)
+        if p:
             return p
-        e = (self.departure_id or "").strip().upper()
-        if re.fullmatch(r"[A-Z]{3}", e):
+        e = normalize_us_iata(self.departure_id)
+        if e:
             return e
-        return ""
+        return DEFAULT_DEPARTURE_ID
 
     def _resolve_arrival_id(self, profile: TravelProfile) -> str:
-        p = (profile.arrival_id or "").strip().upper()
-        if re.fullmatch(r"[A-Z]{3}", p):
+        p = normalize_us_iata(profile.arrival_id)
+        if p:
             return p
-        o = (self.arrival_id_override or "").strip().upper()
-        if re.fullmatch(r"[A-Z]{3}", o):
+        o = normalize_us_iata(self.arrival_id_override)
+        if o:
             return o
         m = re.search(r"\b([A-Z]{3})\b", profile.destination.upper())
         if m:
-            return m.group(1)
-        return ""
+            d = normalize_us_iata(m.group(1))
+            if d:
+                return d
+        return DEFAULT_ARRIVAL_ID
 
     def _bundle_to_option(
         self, bundle: dict, profile: TravelProfile, dep_id: str, arr_id: str

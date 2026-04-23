@@ -3,7 +3,7 @@ from __future__ import annotations
 import html
 import streamlit as st
 
-from travel_planner.models.schemas import FinalPlan, FlightOption, FoodOption
+from travel_planner.models.schemas import FinalPlan, FlightOption, FoodOption, HotelOption
 
 
 def _dining_row_source(notes: str) -> str:
@@ -266,8 +266,94 @@ def render_flights_picks(plan: FinalPlan) -> None:
         )
 
 
+def _hotel_row_source(hotel: HotelOption) -> str:
+    highlights = " ".join(hotel.highlights or [])
+    if "[source:provider:geoapify]" in highlights:
+        return "Geoapify"
+    return "LLM fallback"
+
+
+def _hotel_plan_summary(hotels: list[HotelOption]) -> str:
+    if not hotels:
+        return "No hotel rows returned."
+    geo = sum(1 for h in hotels if _hotel_row_source(h) == "Geoapify")
+    llm = len(hotels) - geo
+    if llm == 0:
+        return f"All **{len(hotels)}** options are **Geoapify** accommodation rows."
+    if geo == 0:
+        return f"All **{len(hotels)}** options are **LLM fallback**."
+    return f"**Mixed:** {geo} from Geoapify, {llm} from LLM fallback."
+
+
+def render_hotels_picks(plan: FinalPlan) -> None:
+    st.markdown("### Hotel options")
+    hotels = plan.hotels or []
+    st.markdown(_hotel_plan_summary(hotels))
+    if not hotels:
+        st.caption("Enable `GEOAPIFY_API_KEY` and regenerate to load live hotel rows.")
+        return
+    for idx, h in enumerate(hotels, start=1):
+        src = _hotel_row_source(h)
+        badge_class = "badge" if src == "Geoapify" else "cost-badge"
+        name = html.escape(h.name)
+        area = html.escape(h.area)
+        price = html.escape(h.price_range_usd)
+        src_e = html.escape(src)
+        details = html.escape(" · ".join([x for x in h.highlights if x and "[source:" not in x][:3]))
+        st.markdown(
+            f"""
+            <div class="activity-card">
+                <b>{idx}. {name}</b>
+                <span class="{badge_class}" style="margin-left:0.35rem;">{src_e}</span><br/>
+                <span class="activity-detail">{area} · {price}</span><br/>
+                <span class="activity-detail">{details}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_shows_picks(plan: FinalPlan) -> None:
+    st.markdown("### Shows and events")
+    shows = plan.shows or []
+    tm = sum(1 for s in shows if "[source:provider:ticketmaster]" in (s.notes or ""))
+    if shows:
+        if tm == len(shows):
+            st.markdown(f"All **{len(shows)}** events are from **Ticketmaster**.")
+        elif tm == 0:
+            st.markdown(f"All **{len(shows)}** events are non-provider/fallback rows.")
+        else:
+            st.markdown(f"**Mixed:** {tm} from Ticketmaster, {len(shows) - tm} fallback/other.")
+    if not shows:
+        st.caption("Set `TICKETMASTER_API_KEY` and regenerate to load live events.")
+        return
+    for idx, s in enumerate(shows, start=1):
+        name = html.escape(s.name)
+        venue = html.escape(s.venue)
+        when = html.escape(s.local_datetime)
+        price = html.escape(s.price_range_usd)
+        url = html.escape(s.url or "")
+        notes = html.escape(s.notes or "")
+        link = f'<a href="{url}" target="_blank">Ticket link</a>' if url else ""
+        src = "Ticketmaster" if "[source:provider:ticketmaster]" in (s.notes or "") else "Other"
+        src_badge = "badge" if src == "Ticketmaster" else "cost-badge"
+        src_e = html.escape(src)
+        st.markdown(
+            f"""
+            <div class="activity-card">
+                <b>{idx}. {name}</b>
+                <span class="{src_badge}" style="margin-left:0.35rem;">{src_e}</span><br/>
+                <span class="activity-detail">{venue} · {when} · {price}</span><br/>
+                <span class="activity-detail">{notes}</span><br/>
+                <span class="activity-detail">{link}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
 def render_dining_picks(plan: FinalPlan) -> None:
-    """Show full dining list from ``plan.dining`` (Geoapify or LLM) — itinerary tab alone stays generic."""
+    """Show full dining list from ``plan.dining`` (Geoapify or LLM)."""
     st.markdown("### Dining picks")
     dining = plan.dining or []
     st.markdown(_dining_plan_summary(dining))
@@ -279,7 +365,8 @@ def render_dining_picks(plan: FinalPlan) -> None:
         badge_class = "badge" if src == "Geoapify" else "cost-badge"
         name = html.escape(d.name)
         cuisine = html.escape(d.cuisine)
-        price = html.escape(d.price_level)
+        raw_price = (d.price_level or "").strip()
+        price = html.escape(raw_price if raw_price else "$$")
         notes = html.escape(d.notes or "")
         src_e = html.escape(src)
         st.markdown(
@@ -287,7 +374,7 @@ def render_dining_picks(plan: FinalPlan) -> None:
             <div class="activity-card">
                 <b>{idx}. {name}</b>
                 <span class="{badge_class}" style="margin-left:0.35rem;">{src_e}</span><br/>
-                <span class="activity-detail">{cuisine} · {price}</span><br/>
+                <span class="activity-detail">{cuisine} · est. price level {price}</span><br/>
                 <span class="activity-detail">{notes}</span>
             </div>
             """,

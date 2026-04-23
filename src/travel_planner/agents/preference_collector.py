@@ -4,42 +4,61 @@ from datetime import date, datetime, timedelta
 import re
 from typing import Any, Dict, List
 
+from travel_planner.config.defaults import (
+    DEFAULT_ARRIVAL_ID,
+    DEFAULT_BUDGET_USD,
+    DEFAULT_DEPARTURE_ID,
+    DEFAULT_DESTINATION,
+    DEFAULT_GROUP_SIZE,
+    DEFAULT_INTERESTS,
+    DEFAULT_TRAVEL_STYLE,
+    DEFAULT_TRIP_DAYS,
+)
 from travel_planner.models.schemas import TravelProfile
+from travel_planner.utils.us_airports import normalize_us_iata
 from travel_planner.utils.llm import SmallModelClient
 
 
 SYSTEM_PROMPT = """
 You are Agent 1 (Preference Collector).
-Mission: convert free-form travel intent into a complete structured profile.
+Goal: extract every usable travel preference from the user text into a strict profile JSON.
 
-Workflow:
-1) Extract core fields:
-- destination
-- start/end dates (trip window; return travel lines up with end_date)
-- budget
-- travel style
-- interests
-- group size (travelers / party size)
-- departure_id and arrival_id (3-letter IATA airport codes when present in user text)
-2) Normalize values:
-- dates in YYYY-MM-DD when the user gave a calendar date or clear timeframe; omit start_date and/or end_date if the user did not give any usable trip dates (do not guess arbitrary months)
-- budget numeric in USD
-- interests as clean list tokens
-3) Identify missing/ambiguous fields and ask targeted clarifying questions.
+Input format:
+- You receive:
+  - `Today: YYYY-MM-DD`
+  - `User request: ...`
 
-Date and party rules:
-- If the user does not state how many travelers, omit group_size or set it to 1 (solo). Only set group_size > 1 when the user clearly mentions multiple people (e.g. "family of 4", "two of us").
+Extraction requirements (high priority):
+1) Capture all explicit details from the user request:
+   - destination
+   - start_date / end_date
+   - budget_usd
+   - travel_style
+   - interests
+   - group_size
+   - departure_id / arrival_id (US 3-letter IATA only when explicitly present)
+2) Preserve user intent wording where possible; do not overwrite clear user constraints.
+3) If a field is missing, leave it empty/null-like in your internal reasoning rather than inventing specifics.
 
-Clarifying question policy:
-- ask only high-impact questions
-- keep questions short and specific
-- avoid asking for information already explicit in input
+Date rules:
+- Resolve relative dates against `Today` (e.g., "tomorrow", "next Friday", "23rd April").
+- Prefer upcoming/future interpretation.
+- Never choose a past year if a future date interpretation is plausible.
+- Output dates only in `YYYY-MM-DD` format.
 
-Output policy:
-- JSON only
-- no markdown
-- return exactly these keys:
-destination, start_date, end_date, budget_usd, travel_style, interests, group_size, departure_id, arrival_id, clarifying_questions
+Group size rules:
+- If user clearly states party size, set it.
+- If not clearly stated, set `group_size` to 1.
+
+Clarifying questions:
+- Add only high-impact unresolved questions.
+- Keep questions short and specific.
+- Do not ask about information that is already explicit.
+
+Output rules:
+- Return JSON only (no markdown, no extra keys).
+- Return exactly these keys:
+  destination, start_date, end_date, budget_usd, travel_style, interests, group_size, departure_id, arrival_id, clarifying_questions
 """
 
 
@@ -50,28 +69,33 @@ class PreferenceCollectorAgent:
     def run(self, user_input: str) -> TravelProfile:
         today = date.today()
         inferred_budget = self._extract_budget_from_text(user_input)
-        default_end = today + timedelta(days=7)
+        hinted_days = self._extract_trip_days_hint(user_input)
+        span_days = hinted_days if hinted_days is not None else DEFAULT_TRIP_DAYS
+        explicit_end = self._extract_iso_date_from_text(user_input)
+        default_start = today
+        default_end = explicit_end if explicit_end is not None else (default_start + timedelta(days=span_days))
         fallback = {
-            "destination": "Tokyo",
-            "start_date": str(today),
+            "destination": DEFAULT_DESTINATION,
+            "start_date": str(default_start),
             "end_date": str(default_end),
-            "budget_usd": inferred_budget if inferred_budget is not None else 2200,
-            "travel_style": "balanced",
-            "interests": ["food", "culture"],
-            "group_size": 1,
-            "departure_id": "",
-            "arrival_id": "",
+            "budget_usd": inferred_budget if inferred_budget is not None else DEFAULT_BUDGET_USD,
+            "travel_style": DEFAULT_TRAVEL_STYLE,
+            "interests": DEFAULT_INTERESTS,
+            "group_size": DEFAULT_GROUP_SIZE,
+            "departure_id": DEFAULT_DEPARTURE_ID,
+            "arrival_id": DEFAULT_ARRIVAL_ID,
             "clarifying_questions": [],
         }
+        llm_input = f"Today: {today.isoformat()}\nUser request: {user_input}"
         try:
-            parsed = self.llm.run_json(SYSTEM_PROMPT, user_input, max_tokens=420)
+            parsed = self.llm.run_json(SYSTEM_PROMPT, llm_input, max_tokens=420)
         except Exception:
             parsed = fallback
-        normalized = self._normalize_profile_payload(parsed, fallback, today)
+        normalized = self._normalize_profile_payload(parsed, fallback, today, span_days)
         return TravelProfile(**normalized)
 
     def _normalize_profile_payload(
-        self, parsed: Dict[str, Any], fallback: Dict[str, Any], today: date
+        self, parsed: Dict[str, Any], fallback: Dict[str, Any], today: date, default_span_days: int
     ) -> Dict[str, Any]:
         payload = {**fallback}
         if not isinstance(parsed, dict):
@@ -84,7 +108,7 @@ class PreferenceCollectorAgent:
 
         start_d = self._parse_iso_date(parsed.get("start_date"))
         end_d = self._parse_iso_date(parsed.get("end_date"))
-        start_d, end_d = self._resolve_trip_dates(start_d, end_d, today)
+        start_d, end_d = self._resolve_trip_dates(start_d, end_d, today, default_span_days)
         payload["start_date"] = str(start_d)
         payload["end_date"] = str(end_d)
 
@@ -106,10 +130,12 @@ class PreferenceCollectorAgent:
         elif isinstance(group_size, str) and group_size.strip().isdigit():
             payload["group_size"] = min(max(int(group_size.strip()), 1), 20)
         else:
-            payload["group_size"] = 1
+            payload["group_size"] = DEFAULT_GROUP_SIZE
 
-        payload["departure_id"] = self._normalize_iata_code(parsed.get("departure_id"))
-        payload["arrival_id"] = self._normalize_iata_code(parsed.get("arrival_id"))
+        dep = self._normalize_iata_code(parsed.get("departure_id"))
+        arr = self._normalize_iata_code(parsed.get("arrival_id"))
+        payload["departure_id"] = dep or fallback["departure_id"]
+        payload["arrival_id"] = arr or fallback["arrival_id"]
 
         interests = parsed.get("interests")
         if isinstance(interests, list):
@@ -127,8 +153,7 @@ class PreferenceCollectorAgent:
         if not isinstance(value, str):
             return ""
         text = value.strip().upper()
-        m = re.search(r"\b([A-Z]{3})\b", text)
-        return m.group(1) if m else ""
+        return normalize_us_iata(text)
 
     def _normalize_clarifying_questions(self, clarifying: Any) -> List[str]:
         if isinstance(clarifying, list):
@@ -152,9 +177,15 @@ class PreferenceCollectorAgent:
         except Exception:
             return None
 
-    def _resolve_trip_dates(self, start_d: date | None, end_d: date | None, today: date) -> tuple[date, date]:
+    def _resolve_trip_dates(
+        self, start_d: date | None, end_d: date | None, today: date, default_span_days: int
+    ) -> tuple[date, date]:
         """Default outbound to today when missing; default trip length 7 nights when end missing."""
-        default_span = timedelta(days=7)
+        default_span = timedelta(days=max(1, default_span_days))
+        if start_d is not None:
+            start_d = self._coerce_to_upcoming_date(start_d, today)
+        if end_d is not None:
+            end_d = self._coerce_to_upcoming_date(end_d, today)
         if start_d is None and end_d is None:
             return today, today + default_span
         if start_d is None:
@@ -169,6 +200,41 @@ class PreferenceCollectorAgent:
         if end_d < start_d:
             end_d = start_d + timedelta(days=1)
         return start_d, end_d
+
+    def _coerce_to_upcoming_date(self, value: date, today: date) -> date:
+        """Shift obviously stale years forward to the next sensible upcoming date."""
+        if value >= today:
+            return value
+        bumped = value
+        # Keep month/day but roll year forward until today or later.
+        while bumped < today and bumped.year < today.year + 5:
+            try:
+                bumped = bumped.replace(year=bumped.year + 1)
+            except ValueError:
+                # Feb 29 on non-leap year -> move to Feb 28.
+                bumped = bumped.replace(year=bumped.year + 1, day=28)
+        return bumped
+
+    def _extract_trip_days_hint(self, text: str) -> int | None:
+        raw = (text or "").lower()
+        m = re.search(r"\b(\d{1,2})\s*day(?:s)?\b", raw)
+        if not m:
+            return None
+        try:
+            days = int(m.group(1))
+            return max(1, min(days, 30))
+        except Exception:
+            return None
+
+    def _extract_iso_date_from_text(self, text: str) -> date | None:
+        raw = text or ""
+        m = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", raw)
+        if not m:
+            return None
+        try:
+            return datetime.strptime(m.group(1), "%Y-%m-%d").date()
+        except Exception:
+            return None
 
     def _extract_budget_from_text(self, text: str) -> float | None:
         raw = (text or "").lower()
