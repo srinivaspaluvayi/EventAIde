@@ -9,18 +9,23 @@ from travel_planner.config.defaults import (
     DEFAULT_DINING_MAX_RESULTS,
     DEFAULT_FLIGHT_MAX_RESULTS,
     DEFAULT_GEOAPIFY_DINING_RADIUS_M,
+    DEFAULT_GEOAPIFY_HOTEL_RADIUS_M,
+    DEFAULT_GEOAPIFY_PLACES_RADIUS_M,
     DEFAULT_MAX_SEARCH_RESULTS,
     DEFAULT_OPENAI_MODEL,
+    DEFAULT_PLACES_MAX_RESULTS,
     DEFAULT_SHOW_MAX_RESULTS,
     MAX_DINING_MAX_RESULTS,
     MAX_FLIGHT_MAX_RESULTS,
     MAX_GEOAPIFY_DINING_RADIUS_M,
     MAX_MAX_SEARCH_RESULTS,
+    MAX_PLACES_MAX_RESULTS,
     MAX_SHOW_MAX_RESULTS,
     MIN_DINING_MAX_RESULTS,
     MIN_FLIGHT_MAX_RESULTS,
     MIN_GEOAPIFY_DINING_RADIUS_M,
     MIN_MAX_SEARCH_RESULTS,
+    MIN_PLACES_MAX_RESULTS,
     MIN_SHOW_MAX_RESULTS,
     DEFAULT_DEPARTURE_ID,
     DEFAULT_ARRIVAL_ID,
@@ -44,6 +49,9 @@ class Settings:
     geoapify_api_key: str = ""
     geoapify_dining_radius_m: int = DEFAULT_GEOAPIFY_DINING_RADIUS_M
     dining_max_results: int = DEFAULT_DINING_MAX_RESULTS
+    places_max_results: int = DEFAULT_PLACES_MAX_RESULTS
+    geoapify_places_radius_m: int = DEFAULT_GEOAPIFY_PLACES_RADIUS_M
+    geoapify_hotel_radius_m: int = DEFAULT_GEOAPIFY_HOTEL_RADIUS_M
     flight_departure_id: str = DEFAULT_DEPARTURE_ID
     flight_arrival_id: str = DEFAULT_ARRIVAL_ID
     flight_max_results: int = DEFAULT_FLIGHT_MAX_RESULTS
@@ -68,6 +76,15 @@ class Settings:
         dining_raw = os.getenv("DINING_MAX_RESULTS", str(DEFAULT_DINING_MAX_RESULTS)).strip()
         dining_max = int(dining_raw) if dining_raw.isdigit() else DEFAULT_DINING_MAX_RESULTS
         dining_max = max(MIN_DINING_MAX_RESULTS, min(dining_max, MAX_DINING_MAX_RESULTS))
+        places_raw = os.getenv("PLACES_MAX_RESULTS", str(DEFAULT_PLACES_MAX_RESULTS)).strip()
+        places_max = int(places_raw) if places_raw.isdigit() else DEFAULT_PLACES_MAX_RESULTS
+        places_max = max(MIN_PLACES_MAX_RESULTS, min(places_max, MAX_PLACES_MAX_RESULTS))
+        places_radius_raw = os.getenv("GEOAPIFY_PLACES_RADIUS_M", str(DEFAULT_GEOAPIFY_PLACES_RADIUS_M)).strip()
+        places_radius = int(places_radius_raw) if places_radius_raw.isdigit() else DEFAULT_GEOAPIFY_PLACES_RADIUS_M
+        places_radius = max(MIN_GEOAPIFY_DINING_RADIUS_M, min(places_radius, MAX_GEOAPIFY_DINING_RADIUS_M))
+        hotel_radius_raw = os.getenv("GEOAPIFY_HOTEL_RADIUS_M", str(DEFAULT_GEOAPIFY_HOTEL_RADIUS_M)).strip()
+        hotel_radius = int(hotel_radius_raw) if hotel_radius_raw.isdigit() else DEFAULT_GEOAPIFY_HOTEL_RADIUS_M
+        hotel_radius = max(MIN_GEOAPIFY_DINING_RADIUS_M, min(hotel_radius, MAX_GEOAPIFY_DINING_RADIUS_M))
 
         flight_max_raw = os.getenv("FLIGHT_MAX_RESULTS", str(DEFAULT_FLIGHT_MAX_RESULTS)).strip()
         flight_max = int(flight_max_raw) if flight_max_raw.isdigit() else DEFAULT_FLIGHT_MAX_RESULTS
@@ -86,6 +103,9 @@ class Settings:
             geoapify_api_key=os.getenv("GEOAPIFY_API_KEY", "").strip(),
             geoapify_dining_radius_m=geo_radius,
             dining_max_results=dining_max,
+            places_max_results=places_max,
+            geoapify_places_radius_m=places_radius,
+            geoapify_hotel_radius_m=hotel_radius,
             flight_departure_id=env_dep or DEFAULT_DEPARTURE_ID,
             flight_arrival_id=env_arr or DEFAULT_ARRIVAL_ID,
             flight_max_results=flight_max,

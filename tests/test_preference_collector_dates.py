@@ -60,3 +60,22 @@ def test_llm_relative_date_result_is_respected() -> None:
     assert profile.start_date == tomorrow
     assert profile.end_date == tomorrow + timedelta(days=2)
 
+
+def test_hinted_days_enforces_minimum_span_when_llm_shortens_trip() -> None:
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    agent = PreferenceCollectorAgent(
+        _StubLLM(
+            payload={
+                "destination": "Chicago",
+                "start_date": str(tomorrow),
+                "end_date": str(tomorrow + timedelta(days=1)),
+            }
+        )
+    )
+
+    profile = agent.run("plan 2 day trip from saint Louis to Chicago from tomorrow")
+
+    assert profile.start_date == tomorrow
+    assert profile.end_date == tomorrow + timedelta(days=2)
+

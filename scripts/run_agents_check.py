@@ -30,6 +30,7 @@ from travel_planner.agents.flight_search_agent import FlightSearchAgent
 from travel_planner.agents.hotel_search_agent import HotelSearchAgent
 from travel_planner.agents.itinerary_planner import ItineraryPlannerAgent
 from travel_planner.agents.logistics_agent import LogisticsAgent
+from travel_planner.agents.places_discovery_agent import PlacesDiscoveryAgent
 from travel_planner.agents.preference_collector import PreferenceCollectorAgent
 from travel_planner.agents.summary_generator import SummaryGeneratorAgent
 from travel_planner.config.settings import Settings
@@ -37,7 +38,9 @@ from travel_planner.providers.dining_provider import NullDiningProvider
 from travel_planner.providers.flight_provider import NullFlightProvider
 from travel_planner.providers.geoapify_dining_provider import GeoapifyDiningProvider
 from travel_planner.providers.geoapify_hotel_provider import GeoapifyHotelProvider
+from travel_planner.providers.geoapify_places_provider import GeoapifyPlacesProvider
 from travel_planner.providers.hotel_provider import NullHotelProvider
+from travel_planner.providers.places_provider import NullPlacesProvider
 from travel_planner.providers.serpapi_flight_provider import SerpApiFlightProvider
 from travel_planner.utils.llm import SmallModelClient
 
@@ -92,6 +95,7 @@ def main() -> int:
             "flight",
             "hotel",
             "dining",
+            "places",
             "budget",
             "itinerary",
             "logistics",
@@ -114,14 +118,22 @@ def main() -> int:
         dining_backend = "GeoapifyDiningProvider"
         hotel_provider = GeoapifyHotelProvider(
             api_key=settings.geoapify_api_key,
-            radius_m=settings.geoapify_dining_radius_m,
+            radius_m=settings.geoapify_hotel_radius_m,
         )
         hotel_backend = "GeoapifyHotelProvider"
+        places_provider = GeoapifyPlacesProvider(
+            api_key=settings.geoapify_api_key,
+            radius_m=settings.geoapify_places_radius_m,
+            max_results=settings.places_max_results,
+        )
+        places_backend = "GeoapifyPlacesProvider"
     else:
         dining_provider = NullDiningProvider()
         hotel_provider = NullHotelProvider()
+        places_provider = NullPlacesProvider()
         dining_backend = "NullDiningProvider (set GEOAPIFY_API_KEY)"
         hotel_backend = "NullHotelProvider (set GEOAPIFY_API_KEY)"
+        places_backend = "NullPlacesProvider (set GEOAPIFY_API_KEY)"
 
     if settings.serpapi_key and settings.flight_departure_id:
         flight_provider = SerpApiFlightProvider(
@@ -138,7 +150,8 @@ def main() -> int:
     print(
         f"model={settings.openai_model!r} flight_backend={flight_backend} "
         f"flight_max={settings.flight_max_results} | dining_backend={dining_backend} "
-        f"dining_max_results={settings.dining_max_results} | hotel_backend={hotel_backend}"
+        f"dining_max_results={settings.dining_max_results} | hotel_backend={hotel_backend} "
+        f"| places_backend={places_backend} places_max={settings.places_max_results}"
     )
     print()
 
@@ -181,6 +194,11 @@ def main() -> int:
         _line(st, "Dining", _dining_detail(dining))
         if stop_after == "dining":
             return 0 if dining else 1
+
+        places = PlacesDiscoveryAgent(provider=places_provider).run(profile=profile)
+        _line("OK" if places else "EMPTY", "Places", f"n={len(places)}")
+        if stop_after == "places":
+            return 0 if places else 1
 
         budget = BudgetOptimizerAgent(llm).run(profile=profile, flights=flights, hotels=hotels, dining=dining)
         _line(

@@ -64,13 +64,17 @@ Optional:
 - `MAX_SEARCH_RESULTS=6`
 - `TRIPFORGE_BACKEND_URL=http://127.0.0.1:8000`
 - `SERPAPI_API_KEY` (for optional [Google Flights](https://serpapi.com/google-flights-api) via SerpAPI)
-- `GEOAPIFY_API_KEY` — [Geoapify](https://www.geoapify.com/) key for dining and hotel POIs ([Places API](https://apidocs.geoapify.com/docs/places/) + [Geocoding](https://apidocs.geoapify.com/docs/geocoding/); OSM-backed data). If unset, dining/hotels fall back to the LLM.
+- `GEOAPIFY_API_KEY` — [Geoapify](https://www.geoapify.com/) key for dining, hotel, and places-to-visit POIs ([Places API](https://apidocs.geoapify.com/docs/places/) + [Geocoding](https://apidocs.geoapify.com/docs/geocoding/); OSM-backed data). If unset, those sections fall back/return empty.
 - `TICKETMASTER_API_KEY` — key for [Ticketmaster Discovery API](https://developer.ticketmaster.com/products-and-docs/apis/discovery-api/v2/) to show live events/shows for the destination and travel dates.
 - `FLIGHT_DEPARTURE_ID` — US IATA departure airport (e.g. `LAX`); if missing/invalid defaults to `LAX`
 - `FLIGHT_ARRIVAL_ID` — US IATA arrival override; if missing/invalid defaults to `ORD` (destination text IATA is used when valid US code)
 - `FLIGHT_MAX_RESULTS` (optional, default `12`, clamped 5–25) — max flight bundles from SerpAPI before LLM cap
 - `GEOAPIFY_DINING_RADIUS_M` (optional, default `8000`, clamped 1000–50000) — search radius in meters around the geocoded destination
+- `GEOAPIFY_HOTEL_RADIUS_M` (optional, default `8000`, clamped 1000–50000) — search radius for hotel POIs
 - `DINING_MAX_RESULTS` (optional, default `30`, clamped 5–100) — max dining options returned from Geoapify / LLM before any future filtering you add
+- `GEOAPIFY_PLACES_RADIUS_M` (optional, default `40000`, clamped 1000–50000) — search radius for places-to-visit POIs
+- `PLACES_MAX_RESULTS` (optional, default `40`, clamped 5–60) — max places-to-visit options returned from Geoapify
+- Places query uses grouped presets for Iconic/Culture/Nature/Family categories and merges results before ranking must-see places.
 - `SHOW_MAX_RESULTS` (optional, default `12`, clamped 3–30) — max Ticketmaster events returned
 
 ### 4) Run the backend API
@@ -131,6 +135,7 @@ PYTHONPATH=src python scripts/run_agents_check.py --only dining
 - If frontend cannot reach backend, verify `TRIPFORGE_BACKEND_URL` and that FastAPI is running on port `8000`.
 - If dining results look generic, verify `GEOAPIFY_API_KEY` and restart the backend after changing `.env`.
 - If hotel results look generic, verify `GEOAPIFY_API_KEY`.
+- If places-to-visit are empty, verify `GEOAPIFY_API_KEY` and check city/date inputs.
 - If shows/events are empty, verify `TICKETMASTER_API_KEY` (and that events exist for your city/date window).
 - If research results are thin, increase `MAX_SEARCH_RESULTS`.
 - If Streamlit does not start, ensure your venv is active and dependencies installed.
