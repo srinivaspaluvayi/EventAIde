@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import List
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field
 
@@ -49,6 +49,39 @@ class Itinerary(BaseModel):
     estimated_total_usd: float = Field(..., ge=0)
 
 
+class TimelineEntry(BaseModel):
+    day: int
+    date: str
+    window: str
+    title: str
+    source: str
+    start_local: str = ""
+    end_local: str = ""
+    notes: str = ""
+
+
+class FlightTimeline(BaseModel):
+    flight_label: str
+    route: str
+    airline: str
+    estimated_cost_usd: float = Field(..., ge=0)
+    entries: List[TimelineEntry] = Field(default_factory=list)
+
+
+class ScenarioSummary(BaseModel):
+    scenario_count: int = 0
+    provider_flights: int = 0
+    fallback_flights: int = 0
+    provider_hotels: int = 0
+    fallback_hotels: int = 0
+    provider_dining: int = 0
+    fallback_dining: int = 0
+    provider_places: int = 0
+    fallback_places: int = 0
+    provider_shows: int = 0
+    fallback_shows: int = 0
+
+
 class Logistics(BaseModel):
     accommodation_options: List[str]
     local_transport: List[str]
@@ -60,6 +93,10 @@ class FlightOption(BaseModel):
     airline: str
     estimated_cost_usd: float = Field(..., ge=0)
     notes: str
+    outbound_details: str = ""
+    return_details: str = ""
+    outbound_raw: Dict[str, Any] = Field(default_factory=dict)
+    return_raw: Dict[str, Any] = Field(default_factory=dict)
 
 
 class HotelOption(BaseModel):
@@ -85,6 +122,19 @@ class ShowOption(BaseModel):
     notes: str = ""
 
 
+class PlaceOption(BaseModel):
+    name: str
+    category: str
+    address: str
+    distance_m: float = Field(default=0, ge=0)
+    latitude: float = 0
+    longitude: float = 0
+    url: str = ""
+    notes: str = ""
+    must_see: bool = False
+    rank_score: float = 0
+
+
 class BudgetPlan(BaseModel):
     transportation_usd: float = Field(..., ge=0)
     stay_usd: float = Field(..., ge=0)
@@ -104,6 +154,10 @@ class FinalPlan(BaseModel):
     hotels: List[HotelOption] = Field(default_factory=list)
     dining: List[FoodOption] = Field(default_factory=list)
     shows: List[ShowOption] = Field(default_factory=list)
+    places: List[PlaceOption] = Field(default_factory=list)
+    timeline: List[TimelineEntry] = Field(default_factory=list)
+    flight_timelines: List[FlightTimeline] = Field(default_factory=list)
+    scenario_summary: ScenarioSummary = Field(default_factory=ScenarioSummary)
     budget_plan: BudgetPlan | None = None
     html_path: str
 

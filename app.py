@@ -21,16 +21,26 @@ from travel_planner.ui.components import (
     render_destination_insights,
     render_dining_picks,
     render_flights_picks,
+    render_guided_setup_summary,
     render_hotels_picks,
+    render_places_picks,
+    render_scenario_summary,
     render_shows_picks,
+    render_trip_scenarios,
     render_export_summary,
     render_hero,
     render_itinerary_browser,
-    render_itinerary_timeline,
     render_logistics,
     render_profile_summary,
+    render_timeline_plan,
 )
-from travel_planner.utils.costing import itinerary_cost_table
+from travel_planner.utils.costing import (
+    budget_summary_rows,
+    estimated_total_spend_usd,
+    flight_budget_options,
+    itinerary_cost_table,
+    selected_flight_context,
+)
 
 
 BACKEND_URL = os.getenv("TRIPFORGE_BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -66,79 +76,149 @@ def main() -> None:
     st.set_page_config(page_title="TripForge AI", layout="wide")
     inject_custom_css()
     render_hero()
-    st.caption("TripForge AI · Agno + GPT-4o-mini + Streamlit")
+    st.caption("Plan smarter trips with provider-backed context and timeline-first execution.")
 
     if "generated_plan" not in st.session_state:
         st.session_state.generated_plan = None
+    if "selected_flight_idx" not in st.session_state:
+        st.session_state.selected_flight_idx = 0
 
-    with st.container(border=True):
-        top_left, top_right = st.columns([0.8, 0.2])
-        with top_left:
-            st.markdown("### Tell us your travel preferences")
-        with top_right:
-            if st.button("Clear current plan", use_container_width=True):
-                st.session_state.generated_plan = None
-                st.success("Cleared current plan.")
-                st.rerun()
-        st.caption("Include destination, date range, budget, travel style, interests, and group size for best results.")
+    st.markdown(
+        """
+        <div class="landing-shell">
+            <h3 class="landing-title">Start Your Trip Story</h3>
+            <p class="landing-sub">Describe your trip in plain language. Include where, when, budget, style, and interests.</p>
+            <div class="prompt-tips">
+                <span class="prompt-tip">Route: St Louis to Chicago</span>
+                <span class="prompt-tip">Duration: 3-5 days</span>
+                <span class="prompt-tip">Budget + interests</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    top_left, top_right = st.columns([0.78, 0.22])
+    with top_left:
         user_prompt = st.text_area(
             "Travel request",
             placeholder=(
-                "Example: Plan a 5-day Tokyo trip in October with a $1800 budget "
-                "for food and anime spots."
+                "Example: Plan a 4 day trip from Saint Louis to Chicago with a $2200 budget, "
+                "balanced pace, and interests in food, architecture, and live shows."
             ),
-            height=130,
+            height=140,
             label_visibility="collapsed",
         )
+    with top_right:
+        st.markdown(" ")
+        if st.button("Generate Plan", type="primary", use_container_width=True):
+            st.session_state._generate_clicked = True
+        if st.button("Clear current plan", use_container_width=True):
+            st.session_state.generated_plan = None
+            st.session_state.selected_flight_idx = 0
+            st.success("Cleared current plan.")
+            st.rerun()
 
-    if st.button("Generate Plan", type="primary"):
+    if st.session_state.get("_generate_clicked"):
+        st.session_state._generate_clicked = False
         if not user_prompt.strip():
             st.warning("Please provide your trip preferences.")
             st.stop()
 
         try:
             st.session_state.generated_plan = _request_plan_with_fallback(user_prompt)
+            st.session_state.selected_flight_idx = 0
         except Exception as exc:
             st.error(f"Could not generate plan: {exc}")
             st.stop()
 
     plan = st.session_state.generated_plan
     if plan is not None:
-        st.success("Travel plan generated. Explore each tab below to review and export.")
+        st.success("Travel plan generated. Use guided chapters below.")
+        chapters = [
+            "Plan Setup",
+            "Trip Scenarios",
+            "Execution Timeline",
+            "Budget & Tradeoffs",
+            "Export & Share",
+        ]
+        if "active_chapter" not in st.session_state:
+            st.session_state.active_chapter = chapters[0]
+        nav_cols = st.columns(len(chapters))
+        for idx, name in enumerate(chapters):
+            with nav_cols[idx]:
+                active = st.session_state.active_chapter == name
+                label = f"{'● ' if active else ''}{name}"
+                if st.button(label, key=f"chapter_nav_{idx}", use_container_width=True):
+                    st.session_state.active_chapter = name
+        chapter = st.session_state.active_chapter
 
-        tab_overview, tab_itinerary, tab_logistics, tab_budget, tab_export = st.tabs(
-            ["Overview", "Itinerary", "Logistics", "Budget", "Export"]
-        )
-
-        with tab_overview:
+        if chapter == "Plan Setup":
+            render_guided_setup_summary(user_prompt)
+            st.divider()
             render_profile_summary(plan)
             st.divider()
             render_destination_insights(plan)
+            st.divider()
+            render_scenario_summary(plan)
+
+        elif chapter == "Trip Scenarios":
+            render_trip_scenarios(plan)
             st.divider()
             render_flights_picks(plan)
             st.divider()
             render_hotels_picks(plan)
             st.divider()
+            render_places_picks(plan)
+            st.divider()
             render_shows_picks(plan)
             st.divider()
             render_dining_picks(plan)
 
-        with tab_itinerary:
+        elif chapter == "Execution Timeline":
+            selected_idx = render_timeline_plan(plan, selected_flight_idx=st.session_state.selected_flight_idx)
+            if selected_idx is not None:
+                st.session_state.selected_flight_idx = selected_idx
+            st.divider()
             render_itinerary_browser(plan)
             st.divider()
-            render_itinerary_timeline(plan)
-
-        with tab_logistics:
             render_logistics(plan)
 
-        with tab_budget:
+        elif chapter == "Budget & Tradeoffs":
             st.subheader("Budget Breakdown")
+            selected_flight_label, selected_flight_cost = selected_flight_context(
+                plan, st.session_state.selected_flight_idx
+            )
+            flight_options = flight_budget_options(plan.flights or [])
+            if flight_options:
+                safe_idx = (
+                    st.session_state.selected_flight_idx
+                    if 0 <= st.session_state.selected_flight_idx < len(flight_options)
+                    else 0
+                )
+                st.caption(f"Budget assumption uses {flight_options[safe_idx][0]}.")
+            st.metric(
+                "Estimated Total (including flights)",
+                f"${estimated_total_spend_usd(plan, selected_flight_cost=selected_flight_cost):,.2f}",
+            )
+            st.table(
+                budget_summary_rows(
+                    plan,
+                    selected_flight_cost=selected_flight_cost,
+                    flight_label=selected_flight_label,
+                )
+            )
+            st.caption("Top-line estimate includes itinerary activities plus the selected flight option.")
+            if plan.budget_plan and plan.budget_plan.optimization_tips:
+                st.markdown("#### Tradeoff recommendations")
+                for tip in plan.budget_plan.optimization_tips[:5]:
+                    st.markdown(f"- {tip}")
+            st.divider()
+            st.markdown("#### Day-by-day itinerary costs")
             st.table(itinerary_cost_table(plan.itinerary))
             st.pyplot(build_budget_chart(plan.itinerary), use_container_width=True)
             st.caption("Chart and table values are estimated from itinerary activities.")
-
-        with tab_export:
-            render_export_summary(plan)
+        else:
+            render_export_summary(plan, selected_flight_idx=st.session_state.selected_flight_idx)
             html_file = Path(plan.html_path)
             if html_file.exists():
                 st.download_button(

@@ -42,7 +42,7 @@ class LogisticsAgent:
             f"Weather: {destination_info.weather_summary}\n"
             f"Days planned: {len(itinerary.days)}\n"
             f"Hotel suggestions: {', '.join(h.name for h in (hotels or [])[:3])}\n"
-            f"Flight notes: {', '.join(f.notes for f in (flights or [])[:2])}"
+            f"Flight notes: {', '.join(f.notes for f in (flights or [])[:3])}"
         )
         fallback = {
             "accommodation_options": [
@@ -71,7 +71,7 @@ class LogisticsAgent:
                 f"{h.name} ({h.area}) - {h.price_range_usd}" for h in hotels[:3]
             ] + merged["accommodation_options"]
         if flights:
-            merged["local_transport"] = [f"Flight note: {f.notes}" for f in flights[:2]] + merged["local_transport"]
+            merged["local_transport"] = [f"Flight note: {f.notes}" for f in flights[:3]] + merged["local_transport"]
         return Logistics(**merged)
 
     def _normalize_payload(self, merged: Dict[str, Any], fallback: Dict[str, Any]) -> Dict[str, Any]:

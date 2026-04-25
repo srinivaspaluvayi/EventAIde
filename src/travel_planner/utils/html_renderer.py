@@ -3,7 +3,8 @@ from __future__ import annotations
 import html as html_lib
 from pathlib import Path
 
-from travel_planner.models.schemas import DestinationInfo, Itinerary, Logistics, TravelProfile
+from travel_planner.models.schemas import DestinationInfo, FlightOption, Itinerary, Logistics, TravelProfile
+from travel_planner.utils.costing import estimated_flight_cost_usd
 
 
 def render_html(
@@ -11,6 +12,7 @@ def render_html(
     destination_info: DestinationInfo,
     itinerary: Itinerary,
     logistics: Logistics,
+    flights: list[FlightOption] | None = None,
     output_path: str = "output/travel_plan.html",
 ) -> str:
     path = Path(output_path)
@@ -58,6 +60,8 @@ def render_html(
         f"<tr><td>Day {day.day}</td><td>${day.day_total_usd:.2f}</td></tr>"
         for day in itinerary.days
     )
+    flight_cost = estimated_flight_cost_usd(flights or [])
+    total_cost = itinerary.estimated_total_usd + flight_cost
 
     rendered_html = f"""
     <html lang="en">
@@ -260,7 +264,8 @@ def render_html(
               </thead>
               <tbody>
                 {budget_rows}
-                <tr><th>Total</th><th class="right">${itinerary.estimated_total_usd:.2f}</th></tr>
+                <tr><td>Flights (lowest option)</td><td class="right">${flight_cost:.2f}</td></tr>
+                <tr><th>Total</th><th class="right">${total_cost:.2f}</th></tr>
               </tbody>
             </table>
             <p class="foot-note">All costs are estimates and may vary by season, provider availability, and booking window.</p>

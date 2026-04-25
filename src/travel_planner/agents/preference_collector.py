@@ -91,11 +91,22 @@ class PreferenceCollectorAgent:
             parsed = self.llm.run_json(SYSTEM_PROMPT, llm_input, max_tokens=420)
         except Exception:
             parsed = fallback
-        normalized = self._normalize_profile_payload(parsed, fallback, today, span_days)
+        normalized = self._normalize_profile_payload(
+            parsed,
+            fallback,
+            today,
+            span_days,
+            enforce_hinted_span=hinted_days is not None,
+        )
         return TravelProfile(**normalized)
 
     def _normalize_profile_payload(
-        self, parsed: Dict[str, Any], fallback: Dict[str, Any], today: date, default_span_days: int
+        self,
+        parsed: Dict[str, Any],
+        fallback: Dict[str, Any],
+        today: date,
+        default_span_days: int,
+        enforce_hinted_span: bool = False,
     ) -> Dict[str, Any]:
         payload = {**fallback}
         if not isinstance(parsed, dict):
@@ -109,6 +120,10 @@ class PreferenceCollectorAgent:
         start_d = self._parse_iso_date(parsed.get("start_date"))
         end_d = self._parse_iso_date(parsed.get("end_date"))
         start_d, end_d = self._resolve_trip_dates(start_d, end_d, today, default_span_days)
+        if enforce_hinted_span:
+            min_end = start_d + timedelta(days=max(1, default_span_days))
+            if end_d < min_end:
+                end_d = min_end
         payload["start_date"] = str(start_d)
         payload["end_date"] = str(end_d)
 
