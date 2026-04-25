@@ -20,6 +20,9 @@ from travel_planner.ui.components import (
     inject_custom_css,
     render_destination_insights,
     render_dining_picks,
+    render_flights_picks,
+    render_hotels_picks,
+    render_shows_picks,
     render_export_summary,
     render_hero,
     render_itinerary_browser,
@@ -111,6 +114,12 @@ def main() -> None:
             render_profile_summary(plan)
             st.divider()
             render_destination_insights(plan)
+            st.divider()
+            render_flights_picks(plan)
+            st.divider()
+            render_hotels_picks(plan)
+            st.divider()
+            render_shows_picks(plan)
             st.divider()
             render_dining_picks(plan)
 

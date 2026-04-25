@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Any, List
 
 from travel_planner.models.schemas import DestinationInfo, TravelProfile
 from travel_planner.tools.search_tool import web_search
@@ -9,28 +9,27 @@ from travel_planner.utils.llm import SmallModelClient
 
 SYSTEM_PROMPT = """
 You are Agent 2 (Destination Research).
-Mission: synthesize destination intelligence from provided web snippets into practical trip guidance.
+Goal: convert provided web snippets into concise, practical destination guidance.
 
-Workflow:
-1) Extract strongest recurring signals from snippets.
-2) Prioritize information that affects traveler decisions:
-- top attractions
-- best areas to stay
-- local operational tips
-- visa/travel compliance basics
-- weather and seasonality implications
-3) Keep outputs concrete and useful for itinerary planning.
+What to produce:
+- `highlights`: strongest destination draws for this trip
+- `best_areas_to_stay`: neighborhood recommendations as plain strings
+- `local_tips`: actionable on-the-ground tips
+- `visa_requirements`: practical compliance note with cautious wording
+- `weather_summary`: seasonal implications relevant to the trip dates
+- `sources`: short snippet references used for grounding
 
-Grounding rules:
-- use snippet evidence; do not fabricate specific facts not supported by context
-- when uncertain, use cautious wording and practical verification advice
-- keep lists non-redundant
+Grounding constraints:
+- Use only information supported by the provided snippets.
+- Do not fabricate precise facts, policies, or venue-specific claims.
+- If uncertain, state uncertainty briefly and suggest verification.
+- Keep output non-redundant and decision-oriented.
 
-Output policy:
-- JSON only
-- no markdown
-- return exactly these keys:
-highlights, best_areas_to_stay, local_tips, visa_requirements, weather_summary, sources
+Schema constraints:
+- Return JSON only, no markdown.
+- Return exactly these keys:
+  highlights, best_areas_to_stay, local_tips, visa_requirements, weather_summary, sources
+- `best_areas_to_stay` MUST be an array of strings only (no objects).
 """
 
 
@@ -64,5 +63,55 @@ class DestinationResearchAgent:
             parsed = self.llm.run_json(SYSTEM_PROMPT, prompt, max_tokens=560)
         except Exception:
             parsed = fallback
-        return DestinationInfo(**{**fallback, **parsed})
+        merged = {**fallback, **parsed}
+        merged["highlights"] = self._normalize_text_list(merged.get("highlights"), fallback["highlights"])
+        merged["best_areas_to_stay"] = self._normalize_areas_list(
+            merged.get("best_areas_to_stay"), fallback["best_areas_to_stay"]
+        )
+        merged["local_tips"] = self._normalize_text_list(merged.get("local_tips"), fallback["local_tips"])
+        merged["sources"] = self._normalize_text_list(merged.get("sources"), fallback["sources"])
+        merged["visa_requirements"] = self._normalize_text(
+            merged.get("visa_requirements"), fallback["visa_requirements"]
+        )
+        merged["weather_summary"] = self._normalize_text(merged.get("weather_summary"), fallback["weather_summary"])
+        return DestinationInfo(**merged)
+
+    def _normalize_text(self, value: Any, fallback: str) -> str:
+        if isinstance(value, str):
+            text = value.strip()
+            return text or fallback
+        return fallback
+
+    def _normalize_text_list(self, value: Any, fallback: List[str]) -> List[str]:
+        if not isinstance(value, list):
+            return fallback
+        out: List[str] = []
+        for item in value:
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    out.append(text)
+        return out or fallback
+
+    def _normalize_areas_list(self, value: Any, fallback: List[str]) -> List[str]:
+        """Accept either strings or {neighborhood, why}-style dicts from the LLM."""
+        if not isinstance(value, list):
+            return fallback
+        out: List[str] = []
+        for item in value:
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    out.append(text)
+                continue
+            if isinstance(item, dict):
+                neighborhood = str(item.get("neighborhood", "")).strip()
+                reason = str(item.get("why", "")).strip() or str(item.get("reason", "")).strip()
+                if neighborhood and reason:
+                    out.append(f"{neighborhood}: {reason}")
+                elif neighborhood:
+                    out.append(neighborhood)
+                elif reason:
+                    out.append(reason)
+        return out or fallback
 

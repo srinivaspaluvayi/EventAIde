@@ -14,6 +14,8 @@ class TravelProfile(BaseModel):
     travel_style: str
     interests: List[str]
     group_size: int = Field(..., ge=1, le=20)
+    departure_id: str = ""
+    arrival_id: str = ""
     clarifying_questions: List[str] = Field(default_factory=list)
 
 
@@ -74,6 +76,15 @@ class FoodOption(BaseModel):
     notes: str
 
 
+class ShowOption(BaseModel):
+    name: str
+    venue: str
+    local_datetime: str
+    price_range_usd: str
+    url: str = ""
+    notes: str = ""
+
+
 class BudgetPlan(BaseModel):
     transportation_usd: float = Field(..., ge=0)
     stay_usd: float = Field(..., ge=0)
@@ -92,6 +103,7 @@ class FinalPlan(BaseModel):
     flights: List[FlightOption] = Field(default_factory=list)
     hotels: List[HotelOption] = Field(default_factory=list)
     dining: List[FoodOption] = Field(default_factory=list)
+    shows: List[ShowOption] = Field(default_factory=list)
     budget_plan: BudgetPlan | None = None
     html_path: str
 
